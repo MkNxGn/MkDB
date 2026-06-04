@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyMkDB"
-version = "0.1.0"
+version = "0.1.1"
 description = "A log-structured, partitioned NoSQL database engine with full-text search, numeric indexes, and dual TCP/HTTP protocols."
 readme = "README.md"
 license = { text = "MIT" }
