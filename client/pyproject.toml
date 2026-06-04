@@ -3,16 +3,16 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "PyMkDB"
+name = "pymkdb-client"
 version = "0.1.0"
-description = "A log-structured, partitioned NoSQL database engine with full-text search, numeric indexes, and dual TCP/HTTP protocols."
+description = "Python client SDK for MkDB — connects via TCP socket or HTTP."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [
     { name = "MNG" }
 ]
-keywords = ["database", "nosql", "document-store", "full-text-search", "log-structured"]
+keywords = ["mkdb", "database", "client", "sdk", "nosql"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -22,19 +22,13 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Database",
-    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = [
-    "colorama>=0.4.6",
-    "reedsolo>=1.7.0",
-]
-
-[project.scripts]
-mkdb = "pymkdb.cli:main"
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/MNG/MkDB"
 Repository = "https://github.com/MNG/MkDB"
 
 [tool.setuptools.packages.find]
-include = ["pymkdb*", "src*"]
+include = ["mkdb_client*"]

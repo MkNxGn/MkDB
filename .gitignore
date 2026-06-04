@@ -129,3 +129,4 @@ dmypy.json
 *.swo
 *PLAN.md
 TestDB/
+.pypi.py

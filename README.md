@@ -38,10 +38,10 @@ Once running, the database will host both TCP socket and HTTP interfaces as spec
 The `MkDBClient` connects seamlessly to your database and abstracts the dual-protocol system:
 
 ```python
-from sdk.mkdb_client import MkDBClient
+from mkdb_client import MkDBClient
 
-client = MkDBClient()
-client.connect(host="127.0.0.1", port=8080)
+client = MkDBClient(host="127.0.0.1", port=8080)
+client.connect()
 
 # Writing a document (computes delta updates intelligently)
 client.set(
