@@ -17,6 +17,8 @@ import urllib.request
 import urllib.error
 from typing import Callable, Optional
 
+from .exceptions import MkDBConnectionError, MkDBTransportError
+
 
 class HttpConnection:
     """HTTP client that mirrors the Connection interface."""
@@ -58,7 +60,7 @@ class HttpConnection:
         try:
             self._http_get("/health")
         except Exception as exc:
-            raise ConnectionError(f"MkDB HTTP server unreachable at {self._base_url}: {exc}") from exc
+            raise MkDBConnectionError(f"MkDB HTTP server unreachable at {self._base_url}: {exc}") from exc
 
     def close(self) -> None:
         """No persistent socket to close."""
@@ -142,7 +144,7 @@ class HttpConnection:
                 body = json.loads(exc.read().decode("utf-8"))
             except Exception:
                 pass
-            raise RuntimeError(body.get("message", str(exc))) from exc
+            raise MkDBTransportError(body.get("message", str(exc))) from exc
 
     def _http_post(self, path: str, payload: dict) -> dict:
         url = self._base_url + path
@@ -158,7 +160,7 @@ class HttpConnection:
                 body = json.loads(exc.read().decode("utf-8"))
             except Exception:
                 pass
-            raise RuntimeError(body.get("message", str(exc))) from exc
+            raise MkDBTransportError(body.get("message", str(exc))) from exc
 
     def _http_delete(self, path: str) -> dict:
         url = self._base_url + path
@@ -173,7 +175,7 @@ class HttpConnection:
                 body = json.loads(exc.read().decode("utf-8"))
             except Exception:
                 pass
-            raise RuntimeError(body.get("message", str(exc))) from exc
+            raise MkDBTransportError(body.get("message", str(exc))) from exc
 
     @staticmethod
     def _err(message: str) -> dict:

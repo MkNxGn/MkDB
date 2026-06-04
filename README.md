@@ -1,63 +1,157 @@
 # MkDB
 
-MkDB is a Custom Log-Structured Merge & Partitioned Redundant Storage Engine built entirely in Python. It provides a robust, highly-available NoSQL/Document database experience with secondary indexing, full-text search, and dual-protocol network access.
+MkDB is a log-structured, partitioned NoSQL document database built entirely in Python. It provides a robust, self-healing storage engine with full-text search, numeric indexes, and dual-protocol network access — all manageable through an embedded web control panel.
 
 ## Architecture Highlights
 
-- **Rolling Log Storage Engine**: Append-only storage format guaranteeing high write availability with safe background compaction.
-- **RAM Cache & Debounced Write Queue**: In-memory caching and debounced batching for extreme performance under high write load.
-- **Query Engine & Secondary Indexes**: Fully featured query evaluation including numeric range checks and tokenized full-text inverted indexes.
-- **Data Integrity**: Multi-disk mirroring and Reed-Solomon parity encoding for proactive self-healing and failover.
-- **Dual Protocols**: Accessible via high-speed, persistent TCP WebSockets or standard stateless REST HTTP endpoints.
-- **Web Administration UI**: Includes an embedded web control panel out-of-the-box (`/control` endpoint).
+- **Rolling Log Storage Engine**: Append-only storage with safe background compaction.
+- **RAM Cache & Debounced Write Queue**: In-memory caching and write batching for high write throughput.
+- **Query Engine & Secondary Indexes**: Numeric range queries and tokenized full-text inverted indexes.
+- **Data Integrity**: Reed-Solomon parity encoding for proactive self-healing.
+- **Dual Protocols**: Persistent TCP socket (with pub-sub) or standard HTTP REST.
+- **Web Administration UI**: Embedded control panel at `/control` — manage stores, users, schema, metrics, and server settings.
 
 ## Project Structure
 
-- `src/db/`: The core database engine (storage primitives, RAM caching, query evaluator, auto-compaction and parity management).
-- `src/server/`: The networking boundary. Houses the TCP Socket and HTTP REST servers, as well as the web-based Control Panel.
-- `src/config/`: Configuration schemas for tailoring memory limits, storage thresholds, and cluster layout.
-- `sdk/`: The official `MkDBClient` for programmatic interaction from Python code.
+- `mkdb/db/`: Core database engine — storage primitives, RAM cache, query engine, compaction, parity.
+- `mkdb/server/`: TCP socket server, HTTP data-plane server, and embedded web control panel.
+- `mkdb/config/`: Configuration schemas for stores, memory limits, storage thresholds, and server bindings.
+- `client/`: The `pymkdb-client` package — a lightweight, stdlib-only Python SDK.
+
+---
+
+## Installation
+
+### Server
+
+```bash
+pip install PyMkDB
+```
+
+### Client (separate package)
+
+```bash
+pip install pymkdb-client
+```
+
+---
 
 ## Getting Started
 
-### Prerequisites
-- Python 3.10+
-- The database storage format is built into MkDB natively, but you'll need the following for advanced data integrity features (Reed-Solomon logic):
-  ```bash
-  pip install reedsolo
-  ```
-
 ### Starting the Server
-MkDB operates as a CLI tool. Launch the engine by pointing it to your desired database directory (which must contain a `config.json` file configuring your stores and network bindings):
-```bash
-python mkdb.py /path/to/your/db
-```
-Once running, the database will host both TCP socket and HTTP interfaces as specified in your `config.json`. The web control panel is accessible via your browser (check server output for the bound port, normally `http://localhost:<port>`).
 
-### Using the Python SDK
-The `MkDBClient` connects seamlessly to your database and abstracts the dual-protocol system:
+MkDB is a CLI tool. Point it at a directory containing a `config.json`:
+
+```bash
+mkdb /path/to/your/db
+```
+
+To generate a default `config.json` in a new directory:
+
+```bash
+mkdb /path/to/your/db -c
+```
+
+Once running, the web control panel is available at `http://localhost:<control_port>`.
+
+---
+
+## Python Client (`pymkdb-client`)
+
+### Basic usage
 
 ```python
-from sdk.mkdb_client import MkDBClient
+from mkdb_client import MkDBClient
 
-client = MkDBClient()
-client.connect(host="127.0.0.1", port=8080)
+# transport="socket" (default, supports pub-sub) or transport="http"
+client = MkDBClient(host="127.0.0.1", port=9001, access="RW", password="mk_db")
+client.connect()
 
-# Writing a document (computes delta updates intelligently)
-client.set(
-    store="products",
-    record_id="prod_001",
-    data={"name": "Steel Bolt", "price": 9.99, "category": "fasteners"}
-)
+# Write a record
+client.set("products", "prod_001", {"name": "Steel Bolt", "price": 9.99})
 
-# Reading a document
-record = client.get("products", "prod_001")
+# Insert with a server-generated ID
+resp = client.insert("products", {"name": "Widget", "price": 4.99})
+print(resp.record_id)
 
-# Querying with filters
-results = client.query("products", filter={
-    "price": {"<=": 10.00},
-    "category": ["fasteners"]
-})
+# Read a record
+resp = client.get("products", "prod_001")
+if resp.found:
+    print(resp.data)
+
+# Query with filters
+resp = client.query("products", {"price": {"lte": 10.00}})
+print(resp.count, resp.ids)
+
+# Query and return full records
+resp = client.query("products", {"name": ["bolt"]}, hydrate=True)
+print(resp.records)
+
+# Delete a record
+client.delete("products", "prod_001")
+
+# Subscribe to live updates (socket transport only)
+client.on_update("products", lambda event: print("Change:", event))
+
+client.close()
 ```
 
-See the `docs/` folder for comprehensive guides on the Query Syntax and SDK Reference.
+### Error handling
+
+```python
+from mkdb_client import (
+    MkDBConnectionError,
+    MkDBAuthError,
+    MkDBTimeoutError,
+    MkDBStoreNotFoundError,
+    MkDBRecordNotFoundError,
+    MkDBStoreExistsError,
+    MkDBQueryError,
+    MkDBServerError,
+)
+
+try:
+    resp = client.get("products", "prod_001")
+except MkDBRecordNotFoundError:
+    print("Record does not exist")
+except MkDBStoreNotFoundError:
+    print("Store does not exist")
+except MkDBQueryError:
+    print("Invalid query filter")
+except MkDBAuthError:
+    print("Authentication failed")
+except MkDBTimeoutError:
+    print("Request timed out")
+except MkDBConnectionError:
+    print("Could not reach server")
+except MkDBServerError as e:
+    print("Server error:", e)
+```
+
+### Control-plane client (`MkDBController`)
+
+`MkDBController` connects to the control-plane HTTP API to manage the database programmatically:
+
+```python
+from mkdb_client import MkDBController
+
+ctrl = MkDBController(host="127.0.0.1", port=8090)
+ctrl.login(username="admin", password="secret")
+
+# Store management
+ctrl.create_store("orders", description="Customer orders")
+ctrl.list_stores()
+ctrl.delete_store("old_store")
+
+# Server control
+ctrl.server_status()
+ctrl.server_stop("http")
+ctrl.server_start("http")
+
+ctrl.logout()
+```
+
+---
+
+See the `docs/` folder for the full Query Syntax reference and SDK documentation.
+

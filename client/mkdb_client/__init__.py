@@ -13,6 +13,18 @@ Usage:
 
 from mkdb_client.client import MkDBClient
 from mkdb_client.controller import MkDBController, ControllerError
+from mkdb_client.exceptions import (
+    MkDBError,
+    MkDBConnectionError,
+    MkDBAuthError,
+    MkDBTimeoutError,
+    MkDBServerError,
+    MkDBTransportError,
+    MkDBStoreNotFoundError,
+    MkDBRecordNotFoundError,
+    MkDBStoreExistsError,
+    MkDBQueryError,
+)
 from mkdb_client.responses import (
     GetResponse,
     WriteResponse,
@@ -26,6 +38,16 @@ __all__ = [
     "MkDBClient",
     "MkDBController",
     "ControllerError",
+    "MkDBError",
+    "MkDBConnectionError",
+    "MkDBAuthError",
+    "MkDBTimeoutError",
+    "MkDBServerError",
+    "MkDBTransportError",
+    "MkDBStoreNotFoundError",
+    "MkDBRecordNotFoundError",
+    "MkDBStoreExistsError",
+    "MkDBQueryError",
     "GetResponse",
     "WriteResponse",
     "DeleteResponse",

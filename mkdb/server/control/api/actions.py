@@ -23,23 +23,46 @@ def api_create_store(database: mkdb, data: dict):
         raise e
 
 def api_delete_store(database: mkdb, data: dict):
-    """Delete a store from the config."""
-    store_name:str = data.get("name", "").strip()
-    
+    """Delete a store from the config and archive its data directory."""
+    import os
+    import shutil
+
+    store_name: str = data.get("name", "").strip()
+
     if not store_name:
         raise ValueError("Store name is required")
-    
+
     if database is None:
         raise RuntimeError("Database not initialized")
-    
+
     if store_name not in database.config.stores:
         raise ValueError(f"Store '{store_name}' does not exist")
-    
+
+    # Tear down the live store object first to release all file locks
+    store_obj = database.stores.pop(store_name, None)
+    if store_obj is not None:
+        try:
+            store_obj.teardown()
+        except Exception:
+            pass
+
     del database.config.stores[store_name]
-    
+    database.config.save()
+
+    # Move store data directory to __archived__/<store_name>
+    stores_dir = os.path.join(database.config.base_path, "stores")
+    src = os.path.join(stores_dir, store_name)
+    if os.path.isdir(src):
+        archive_dir = os.path.join(stores_dir, "__archived__")
+        os.makedirs(archive_dir, exist_ok=True)
+        dst = os.path.join(archive_dir, store_name)
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
+        shutil.move(src, dst)
+
     return {
         "store_name": store_name,
-        "message": f"Store '{store_name}' deleted successfully"
+        "message": f"Store '{store_name}' archived successfully"
     }
 
 def api_list_stores(database: mkdb, data: dict):

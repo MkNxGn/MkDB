@@ -12,6 +12,8 @@ import threading
 import uuid
 from typing import Callable, Optional
 
+from .exceptions import MkDBAuthError, MkDBConnectionError, MkDBTimeoutError
+
 
 MAX_FRAME = 10 * 1024 * 1024   # 10 MB
 
@@ -76,7 +78,7 @@ class Connection:
         perm = self._handshake_recv(sock)
         if perm.get("type") != "permissions":
             sock.close()
-            raise ConnectionError(f"Expected 'permissions', got: {perm}")
+            raise MkDBConnectionError(f"Expected 'permissions', got: {perm}")
 
         read_protected  = perm.get("read_protected", False)
         write_protected = perm.get("write_protected", False)
@@ -93,10 +95,10 @@ class Connection:
             challenge = self._handshake_recv(sock)
             if challenge.get("type") != "auth_required":
                 sock.close()
-                raise ConnectionError(f"Expected 'auth_required', got: {challenge}")
+                raise MkDBConnectionError(f"Expected 'auth_required', got: {challenge}")
             if not self._password:
                 sock.close()
-                raise PermissionError("Server requires authentication but no password provided")
+                raise MkDBAuthError("Server requires authentication but no password provided")
             self._handshake_send(sock, {
                 "type":     "auth",
                 "username": self._username,
@@ -105,17 +107,17 @@ class Connection:
             result = self._handshake_recv(sock)
             if result.get("type") == "error":
                 sock.close()
-                raise PermissionError(result.get("error", "Authentication failed"))
+                raise MkDBAuthError(result.get("error", "Authentication failed"))
             if result.get("type") != "auth_ok":
                 sock.close()
-                raise ConnectionError(f"Unexpected handshake response: {result}")
+                raise MkDBConnectionError(f"Unexpected handshake response: {result}")
             self.can_read  = result.get("can_read",  False)
             self.can_write = result.get("can_write", False)
         else:
             ready = self._handshake_recv(sock)
             if ready.get("type") == "error":
                 sock.close()
-                raise ConnectionError(ready.get("error", "Connection refused"))
+                raise MkDBConnectionError(ready.get("error", "Connection refused"))
             self.can_read  = ready.get("can_read",  True)
             self.can_write = ready.get("can_write", False)
 
@@ -172,7 +174,7 @@ class Connection:
             result = self._results.pop(correlation_id, None)
             self._pending.pop(correlation_id, None)
         if result is None:
-            raise TimeoutError("No response received within timeout")
+            raise MkDBTimeoutError("No response received within timeout")
         return result
 
     def send_raw(self, payload: dict) -> None:

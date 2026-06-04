@@ -826,12 +826,15 @@
                 <button class="modal-close" onclick="closeModal('deleteModal')">&times;</button>
             </div>
             <div class="warning-text">
-                This action cannot be undone. The store configuration will be permanently removed.
+                The store will be removed from the configuration and its data will be moved to <strong>stores/__archived__/</strong>. This cannot be undone from the UI.
             </div>
-            <p style="font-size:0.875rem;color:var(--text-muted)">You are about to delete store: <strong id="deleteStoreName" style="color:var(--text)"></strong></p>
+            <p style="font-size:0.875rem;color:var(--text-muted)">To confirm, type the store name <strong id="deleteStoreName" style="color:var(--text)"></strong> below:</p>
+            <div class="form-group" style="margin-bottom:0">
+                <input type="text" id="deleteConfirmInput" placeholder="Type store name to confirm" autocomplete="off" oninput="validateDeleteConfirm()">
+            </div>
             <div class="modal-footer">
                 <button class="btn btn-ghost" onclick="closeModal('deleteModal')">Cancel</button>
-                <button class="btn btn-danger" onclick="submitDelete()">Delete</button>
+                <button class="btn btn-danger" id="deleteSubmitBtn" onclick="submitDelete()" disabled>Delete</button>
             </div>
         </div>
     </div>
@@ -1087,16 +1090,25 @@
         function openDeleteModal(name) {
             deletingStore = name;
             document.getElementById('deleteStoreName').textContent = name;
+            document.getElementById('deleteConfirmInput').value = '';
+            document.getElementById('deleteSubmitBtn').disabled = true;
             openModal('deleteModal');
+            setTimeout(function () { document.getElementById('deleteConfirmInput').focus(); }, 50);
+        }
+
+        function validateDeleteConfirm() {
+            const input = document.getElementById('deleteConfirmInput').value;
+            document.getElementById('deleteSubmitBtn').disabled = (input !== deletingStore);
         }
 
         async function submitDelete() {
             if (!deletingStore) return;
             const name = deletingStore;
+            if (document.getElementById('deleteConfirmInput').value !== name) return;
             try {
                 await api('api_delete_store', { name: name });
                 closeModal('deleteModal');
-                toast('Store "' + name + '" deleted.', 'success');
+                toast('Store "' + name + '" archived.', 'success');
                 deletingStore = null;
                 await loadStores();
             } catch (e) {

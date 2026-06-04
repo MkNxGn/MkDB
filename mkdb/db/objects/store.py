@@ -232,7 +232,7 @@ class store:
         if self._ram_cache is not None:
             cached = self._ram_cache.get(record_id)
             if cached is not None:
-                return cached
+                return {"_id": record_id, **cached}
         if self.index_manager is None:
             raise RuntimeError("Store is not set up. Call setup() first.")
         entry = self.index_manager.get(record_id)
@@ -246,7 +246,7 @@ class store:
         _, flat_dict = _serializer.deserialize_record(line_str)
         if self._ram_cache is not None:
             self._ram_cache.set(record_id, flat_dict)
-        return flat_dict
+        return {"_id": record_id, **flat_dict}
 
     def delete(self, record_id: str) -> None:
         """Soft-delete a record."""

@@ -20,7 +20,10 @@ import urllib.error
 from typing import Optional
 
 
-class ControllerError(Exception):
+from .exceptions import MkDBError
+
+
+class ControllerError(MkDBError):
     """Raised when the control API returns an error response."""
     pass
 

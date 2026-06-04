@@ -26,6 +26,13 @@ from typing import Callable, Optional
 from .connection import Connection
 from .http_connection import HttpConnection
 from .delta import flatten
+from .exceptions import (
+    MkDBServerError,
+    MkDBStoreNotFoundError,
+    MkDBRecordNotFoundError,
+    MkDBStoreExistsError,
+    MkDBQueryError,
+)
 from .responses import (
     GetResponse,
     WriteResponse,
@@ -173,8 +180,19 @@ class MkDBClient:
 
     @staticmethod
     def _raise_if_error(resp: dict) -> None:
-        if resp.get("status") != "ok":
-            raise RuntimeError(resp.get("error", "Unknown error"))
+        if resp.get("status") == "ok":
+            return
+        msg = resp.get("error") or "Unknown error"
+        low = msg.lower()
+        if "not found in store" in low or "record" in low and "not found" in low:
+            raise MkDBRecordNotFoundError(msg)
+        if "store" in low and "not found" in low:
+            raise MkDBStoreNotFoundError(msg)
+        if "already exists" in low:
+            raise MkDBStoreExistsError(msg)
+        if "syntax" in low or "invalid query" in low or "filter" in low or "'filter' must" in low:
+            raise MkDBQueryError(msg)
+        raise MkDBServerError(msg)
 
 
 class AuthManager:
