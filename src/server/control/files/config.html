@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MkDB &mdash; Settings</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --sidebar: #080e1c;
+            --panel: #1e293b;
+            --border: #334155;
+            --border-mid: #475569;
+            --blue: #3b82f6;
+            --blue-dim: rgba(59, 130, 246, 0.12);
+            --blue-light: #60a5fa;
+            --text: #e2e8f0;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 1.25rem 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand-icon {
+            width: 22px;
+            height: 22px;
+            color: var(--blue-light);
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand span {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: 0.02em;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 0.75rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.6rem 1.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link svg {
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+        }
+
+        .nav-link:hover {
+            background: var(--blue-dim);
+            color: var(--text);
+            border-left-color: var(--border-mid);
+        }
+
+        .nav-link.active {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border-left-color: var(--blue);
+        }
+
+        .sidebar-footer {
+            padding: 0.75rem 1.25rem 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.15s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            padding: 1rem 1.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: var(--bg);
+        }
+
+        .topbar-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .topbar-sub {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 1px;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .content.loaded {
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .content.loaded .card {
+            width: 45%;
+        }
+
+        /* CARD */
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+        }
+
+        .card-header {
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 0.2rem;
+        }
+
+        .card-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* BUTTONS */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.55rem 1.1rem;
+            border: none;
+            border-radius: 7px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* FORMS */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+        }
+
+        label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-mid);
+            border-radius: 7px;
+            color: var(--text);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-family: inherit;
+            width: 100%;
+            transition: border-color 0.15s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+
+        input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        .hint {
+            font-size: 0.73rem;
+            color: var(--text-dim);
+        }
+
+        .readonly-field {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            color: var(--text-muted);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-family: inherit;
+            width: 100%;
+        }
+
+        /* SPINNER */
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            padding: 0.5rem 0;
+        }
+
+        .save-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+
+        /* TOAST */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text);
+            max-width: 320px;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.25s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--green);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--red);
+        }
+
+        .toast-info {
+            border-left: 3px solid var(--blue);
+        }
+
+        /* SERVER CONTROL */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+
+        .badge-green {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-red {
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            display: inline-block;
+        }
+
+        .card-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.2rem;
+        }
+
+        .server-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .btn-warning {
+            background: rgba(245, 158, 11, 0.12);
+            color: #fbbf24;
+            border: 1px solid var(--yellow);
+        }
+
+        .btn-warning:hover {
+            background: rgba(245, 158, 11, 0.22);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+            border: 1px solid var(--red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.22);
+        }
+
+        .btn-sm {
+            padding: 0.4rem 0.85rem;
+            font-size: 0.8rem;
+        }
+
+        textarea {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-mid);
+            border-radius: 7px;
+            color: var(--text);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-family: inherit;
+            width: 100%;
+            transition: border-color 0.15s;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 1rem;
+        }
+
+        .toggle-row label {
+            margin: 0;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .toggle {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 36px;
+            height: 20px;
+            background: var(--border-mid);
+            border-radius: 10px;
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+
+        .toggle:checked {
+            background: var(--blue);
+        }
+
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            top: 3px;
+            left: 3px;
+            transition: left 0.2s;
+        }
+
+        .toggle:checked::after {
+            left: 19px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span>MkDB</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/home" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/stores" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span>Stores</span>
+                </a>
+                <a href="/config" class="nav-link active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                <a href="/security" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Security</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-row">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Running</span>
+                </div>
+                <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Sign out</button>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="topbar">
+                <div>
+                    <div class="topbar-title">Settings</div>
+                    <div class="topbar-sub">Database &amp; server configuration</div>
+                </div>
+            </div>
+            <div class="content">
+                <div id="loadingRow" class="loading-row">
+                    <div class="spinner"></div><span>Loading configuration...</span>
+                </div>
+
+                <!-- DATABASE CARD -->
+                <div class="card" id="dbCard" style="display:none">
+                    <div class="card-header">
+                        <div class="card-title">Database</div>
+                        <div class="card-desc">General database identity settings.</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dbName">Database Name</label>
+                        <input type="text" id="dbName" placeholder="Enter database name" autocomplete="off">
+                        <span class="hint">Display identifier. Does not rename the data directory.</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Base Path</label>
+                        <div class="readonly-field" id="dbBasePath">&mdash;</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Store Count</label>
+                        <div class="readonly-field" id="dbStoreCount">&mdash;</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="storageNodes">Storage Nodes <span style="font-weight:400;color:var(--text-dim)">(one per line)</span></label>
+                        <textarea id="storageNodes" rows="3" placeholder="Leave empty for single-node mode"></textarea>
+                        <span class="hint">Mirror node paths for multi-disk replication.</span>
+                    </div>
+                    <div class="save-row">
+                        <button class="btn btn-primary" onclick="saveDb()">Save</button>
+                    </div>
+                </div>
+
+                <!-- CONTROL SERVER CARD -->
+                <div class="card" id="controlCard" style="display:none">
+                    <div class="card-header">
+                        <div class="card-title-row">
+                            <div>
+                                <div class="card-title">Control Server</div>
+                                <div class="card-desc">HTTP admin panel &mdash; this page.</div>
+                            </div>
+                            <span id="controlBadge" class="badge">&mdash;</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="controlHost">Host</label>
+                        <input type="text" id="controlHost" placeholder="localhost">
+                    </div>
+                    <div class="form-group">
+                        <label for="controlPort">Port</label>
+                        <input type="number" id="controlPort" placeholder="80" min="1" max="65535">
+                    </div>
+                    <div class="server-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveServerConfig('control')">Save Config</button>
+                        <button class="btn btn-warning btn-sm" onclick="serverControl('control','restart')">Restart</button>
+                    </div>
+                </div>
+
+                <!-- SOCKET SERVER CARD -->
+                <div class="card" id="socketCard" style="display:none">
+                    <div class="card-header">
+                        <div class="card-title-row">
+                            <div>
+                                <div class="card-title">Socket Server</div>
+                                <div class="card-desc">Persistent TCP connection server.</div>
+                            </div>
+                            <span id="socketBadge" class="badge">&mdash;</span>
+                        </div>
+                    </div>
+                    <div class="toggle-row">
+                        <input type="checkbox" class="toggle" id="socketEnabled">
+                        <label for="socketEnabled">Enabled</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="socketHost">Host</label>
+                        <input type="text" id="socketHost" placeholder="0.0.0.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="socketPort">Port</label>
+                        <input type="number" id="socketPort" placeholder="9001" min="1" max="65535">
+                    </div>
+                    <div class="form-group">
+                        <label for="socketHeartbeat">Heartbeat Interval (s)</label>
+                        <input type="number" id="socketHeartbeat" step="0.5" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="socketMaxClients">Max Clients</label>
+                        <input type="number" id="socketMaxClients" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="socketRecvTimeout">Recv Timeout (s)</label>
+                        <input type="number" id="socketRecvTimeout" step="0.5" min="1">
+                    </div>
+                    <div class="server-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveServerConfig('socket')">Save Config</button>
+                        <button class="btn btn-secondary btn-sm" onclick="serverControl('socket','start')">Start</button>
+                        <button class="btn btn-ghost btn-sm" onclick="serverControl('socket','stop')">Stop</button>
+                        <button class="btn btn-warning btn-sm" onclick="serverControl('socket','restart')">Restart</button>
+                    </div>
+                </div>
+
+                <!-- HTTP DATA SERVER CARD -->
+                <div class="card" id="httpCard" style="display:none">
+                    <div class="card-header">
+                        <div class="card-title-row">
+                            <div>
+                                <div class="card-title">HTTP Data Server</div>
+                                <div class="card-desc">Stateless REST data-plane API.</div>
+                            </div>
+                            <span id="httpBadge" class="badge">&mdash;</span>
+                        </div>
+                    </div>
+                    <div class="toggle-row">
+                        <input type="checkbox" class="toggle" id="httpEnabled">
+                        <label for="httpEnabled">Enabled</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="httpHost">Host</label>
+                        <input type="text" id="httpHost" placeholder="0.0.0.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="httpPort">Port</label>
+                        <input type="number" id="httpPort" placeholder="8080" min="1" max="65535">
+                    </div>
+                    <div class="form-group">
+                        <label for="httpMaxBody">Max Body Size (bytes)</label>
+                        <input type="number" id="httpMaxBody" min="1024">
+                        <span class="hint">Default 10&nbsp;485&nbsp;760 (10&nbsp;MB).</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="httpMaxRps">Max Requests / Second (per IP)</label>
+                        <input type="number" id="httpMaxRps" min="1">
+                    </div>
+                    <div class="toggle-row" style="margin-top:0.25rem">
+                        <input type="checkbox" class="toggle" id="httpCors">
+                        <label for="httpCors">CORS Enabled</label>
+                    </div>
+                    <div class="server-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveServerConfig('http')">Save Config</button>
+                        <button class="btn btn-secondary btn-sm" onclick="serverControl('http','start')">Start</button>
+                        <button class="btn btn-ghost btn-sm" onclick="serverControl('http','stop')">Stop</button>
+                        <button class="btn btn-warning btn-sm" onclick="serverControl('http','restart')">Restart</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script>
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // Track original control server host/port so we can detect changes on save
+        var _origControlHost = '';
+        var _origControlPort = 0;
+
+        async function api(action, data) {
+            data = data || {};
+            const res = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ action }, data))
+            });
+            if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthenticated'); }
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message || 'Server error');
+            return json.result;
+        }
+
+        function toast(msg, type, dur) {
+            type = type || 'info'; dur = dur || 3500;
+            const el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = msg;
+            document.getElementById('toastContainer').appendChild(el);
+            requestAnimationFrame(function () { el.classList.add('show'); });
+            setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 300); }, dur);
+        }
+
+        function setBadge(id, running) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (running) {
+                el.className = 'badge badge-green';
+                el.innerHTML = '<span class="badge-dot"></span> Running';
+            } else {
+                el.className = 'badge badge-red';
+                el.innerHTML = '<span class="badge-dot"></span> Stopped';
+            }
+        }
+
+        async function initAuth() {
+            try {
+                const res = await fetch('/auth/status');
+                const d = await res.json();
+                if (d.enabled) document.getElementById('logoutBtn').style.display = '';
+            } catch (e) { }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            document.cookie = 'mkdb_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            window.location.href = '/login';
+        }
+
+        async function refreshStatus() {
+            try {
+                const st = await api('api_get_server_status');
+                setBadge('controlBadge', st.control && st.control.running);
+                setBadge('socketBadge', st.socket && st.socket.running);
+                setBadge('httpBadge', st.http && st.http.running);
+            } catch (e) { /* ignore */ }
+        }
+
+        async function loadSettings() {
+            try {
+                const s = await api('api_get_db_settings');
+                document.getElementById('dbName').value = s.name || '';
+                document.getElementById('dbBasePath').textContent = s.base_path || '\u2014';
+                document.getElementById('dbStoreCount').textContent = s.store_count !== undefined ? s.store_count : '\u2014';
+                document.getElementById('storageNodes').value = (s.storage_nodes || []).join('\n');
+                document.getElementById('controlHost').value = s.servers.control.host || '';
+                document.getElementById('controlPort').value = s.servers.control.port || '';
+                _origControlHost = s.servers.control.host || '';
+                _origControlPort = s.servers.control.port || 0;
+                document.getElementById('socketEnabled').checked = !!s.servers.socket.enabled;
+                document.getElementById('socketHost').value = s.servers.socket.host || '';
+                document.getElementById('socketPort').value = s.servers.socket.port || '';
+                document.getElementById('socketHeartbeat').value = s.servers.socket.heartbeat_interval || 5;
+                document.getElementById('socketMaxClients').value = s.servers.socket.max_clients || 100;
+                document.getElementById('socketRecvTimeout').value = s.servers.socket.recv_timeout || 30;
+                document.getElementById('httpEnabled').checked = !!s.servers.http.enabled;
+                document.getElementById('httpHost').value = s.servers.http.host || '';
+                document.getElementById('httpPort').value = s.servers.http.port || '';
+                document.getElementById('httpMaxBody').value = s.servers.http.max_body_size || 10485760;
+                document.getElementById('httpMaxRps').value = s.servers.http.max_requests_per_second || 100;
+                document.getElementById('httpCors').checked = !!s.servers.http.cors_enabled;
+                document.getElementById('loadingRow').style.display = 'none';
+                document.querySelector('.content').classList.add('loaded');
+                ['dbCard', 'controlCard', 'socketCard', 'httpCard'].forEach(function (id) { document.getElementById(id).style.display = ''; });
+            } catch (e) {
+                document.getElementById('loadingRow').style.display = 'none';
+                toast('Failed to load settings: ' + e.message, 'error');
+                ['dbCard', 'controlCard', 'socketCard', 'httpCard'].forEach(function (id) { document.getElementById(id).style.display = ''; });
+            }
+            await refreshStatus();
+        }
+
+        async function saveDb() {
+            try {
+                const nodes = document.getElementById('storageNodes').value
+                    .split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+                await api('api_update_db_settings', {
+                    name: document.getElementById('dbName').value.trim(),
+                    storage_nodes: nodes,
+                });
+                toast('Database settings saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveServerConfig(name) {
+            var payload = { server: name };
+            if (name === 'control') {
+                var newHost = document.getElementById('controlHost').value.trim();
+                var newPort = parseInt(document.getElementById('controlPort').value, 10);
+                payload.host = newHost;
+                payload.port = newPort;
+                var needsRestart = (newHost !== _origControlHost || newPort !== _origControlPort);
+                try {
+                    await api('api_update_server_config', payload);
+                    if (needsRestart) {
+                        // Fire-and-forget restart — server closes before response arrives
+                        api('api_server_control', { server: 'control', op: 'restart' }).catch(function () { });
+                        var newUrl = window.location.protocol + '//' + (newHost || 'localhost') + ':' + newPort + '/home';
+                        toast('Host/port changed \u2014 restarting. Redirecting to new URL in 5s\u2026', 'info', 6500);
+                        setTimeout(function () { window.location.href = newUrl; }, 5000);
+                    } else {
+                        toast('Control server config saved.', 'success');
+                    }
+                } catch (e) {
+                    toast('Save failed: ' + e.message, 'error');
+                }
+                return;
+            } else if (name === 'socket') {
+                payload.enabled = document.getElementById('socketEnabled').checked;
+                payload.host = document.getElementById('socketHost').value.trim();
+                payload.port = parseInt(document.getElementById('socketPort').value, 10);
+                payload.heartbeat_interval = parseFloat(document.getElementById('socketHeartbeat').value);
+                payload.max_clients = parseInt(document.getElementById('socketMaxClients').value, 10);
+                payload.recv_timeout = parseFloat(document.getElementById('socketRecvTimeout').value);
+            } else if (name === 'http') {
+                payload.enabled = document.getElementById('httpEnabled').checked;
+                payload.host = document.getElementById('httpHost').value.trim();
+                payload.port = parseInt(document.getElementById('httpPort').value, 10);
+                payload.max_body_size = parseInt(document.getElementById('httpMaxBody').value, 10);
+                payload.max_requests_per_second = parseInt(document.getElementById('httpMaxRps').value, 10);
+                payload.cors_enabled = document.getElementById('httpCors').checked;
+            }
+            try {
+                await api('api_update_server_config', payload);
+                toast(name + ' server config saved. Use Restart to apply.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function serverControl(name, action) {
+            if (action === 'restart' && name === 'control') {
+                if (!confirm('Restarting the control server will briefly disconnect this page. Continue?')) return;
+            }
+            try {
+                const r = await api('api_server_control', { server: name, op: action });
+                toast((r.deferred ? 'Scheduled: ' : '') + name + ' ' + action + 'ed.', 'info');
+                if (r.deferred) {
+                    setTimeout(function () { window.location.reload(); }, 4000);
+                } else {
+                    setTimeout(refreshStatus, 600);
+                }
+            } catch (e) {
+                toast('Action failed: ' + e.message, 'error');
+            }
+        }
+
+        setInterval(refreshStatus, 5000);
+
+        window.addEventListener('load', function () {
+            initAuth();
+            loadSettings();
+        });
+    </script>
+</body>
+
+</html>

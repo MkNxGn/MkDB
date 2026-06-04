@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MkDB &mdash; Stores</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --sidebar: #080e1c;
+            --panel: #1e293b;
+            --border: #334155;
+            --border-mid: #475569;
+            --blue: #3b82f6;
+            --blue-dim: rgba(59, 130, 246, 0.12);
+            --blue-light: #60a5fa;
+            --text: #e2e8f0;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 1.25rem 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand-icon {
+            width: 22px;
+            height: 22px;
+            color: var(--blue-light);
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand span {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: 0.02em;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 0.75rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.6rem 1.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link svg {
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+        }
+
+        .nav-link:hover {
+            background: var(--blue-dim);
+            color: var(--text);
+            border-left-color: var(--border-mid);
+        }
+
+        .nav-link.active {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border-left-color: var(--blue);
+        }
+
+        .sidebar-footer {
+            padding: 0.75rem 1.25rem 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.15s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            padding: 1rem 1.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: var(--bg);
+        }
+
+        .topbar-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .topbar-sub {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 1px;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.75rem;
+        }
+
+        /* BUTTONS */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.55rem 1.1rem;
+            border: none;
+            border-radius: 7px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-secondary {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border: 1px solid var(--blue);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+            border: 1px solid var(--red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.22);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--border-mid);
+            color: var(--text);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-icon {
+            padding: 0.45rem 0.7rem;
+            font-size: 0.8rem;
+        }
+
+        /* FORMS */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+        }
+
+        label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input,
+        select,
+        textarea {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-mid);
+            border-radius: 7px;
+            color: var(--text);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-family: inherit;
+            width: 100%;
+            transition: border-color 0.15s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+
+        input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .hint {
+            font-size: 0.73rem;
+            color: var(--text-dim);
+        }
+
+        .field-error {
+            font-size: 0.73rem;
+            color: #f87171;
+            display: none;
+        }
+
+        .field-error.show {
+            display: block;
+        }
+
+        /* STORE LIST */
+        .store-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .store-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            border-left: 4px solid var(--blue);
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .store-card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .store-card-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-heading);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .store-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--blue);
+            flex-shrink: 0;
+        }
+
+        .store-card-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* RAM inline badge in store card */
+        .store-card-ram {
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            margin-top: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ram-inline-track {
+            width: 80px;
+            height: 5px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .ram-inline-fill {
+            height: 100%;
+            background: var(--blue);
+            border-radius: 3px;
+            transition: width 0.4s;
+        }
+
+        .ram-inline-fill.ram-high {
+            background: #e67e22;
+        }
+
+        .ram-inline-fill.ram-full {
+            background: var(--red);
+        }
+
+        /* RAM overview section */
+        .section-heading {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--text-dim);
+            margin-bottom: 0.75rem;
+        }
+
+        .ram-overview-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+        }
+
+        .ram-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.84rem;
+        }
+
+        .ram-table th {
+            text-align: left;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+            padding: 0.35rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .ram-table td {
+            padding: 0.55rem 0.6rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+        }
+
+        .ram-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .ram-table td:first-child {
+            font-weight: 500;
+            color: var(--text-heading);
+        }
+
+        .ram-bar-track {
+            width: 100%;
+            min-width: 60px;
+            height: 7px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .ram-bar-fill {
+            height: 100%;
+            background: var(--blue);
+            border-radius: 4px;
+            transition: width 0.4s;
+        }
+
+        .ram-bar-fill.ram-high {
+            background: #e67e22;
+        }
+
+        .ram-bar-fill.ram-full {
+            background: var(--red);
+        }
+
+        .ram-overview-footer {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.85rem;
+            font-size: 0.78rem;
+            color: var(--text-dim);
+        }
+
+        .ram-overview-footer button {
+            color: var(--text-muted);
+        }
+
+        .store-card-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        /* EMPTY STATE */
+        .empty-state {
+            text-align: center;
+            padding: 3.5rem 1rem;
+            color: var(--text-dim);
+        }
+
+        .empty-state-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .empty-state h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+        }
+
+        .empty-state p {
+            font-size: 0.85rem;
+        }
+
+        /* SPINNER */
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+
+        /* MODAL */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.75rem;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .modal-footer .btn {
+            flex: 1;
+        }
+
+        .warning-text {
+            background: rgba(239, 68, 68, 0.07);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            padding: 0.875rem 1rem;
+            font-size: 0.85rem;
+            color: #fca5a5;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+
+        /* TOAST */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text);
+            max-width: 320px;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.25s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--green);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--red);
+        }
+
+        .toast-info {
+            border-left: 3px solid var(--blue);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span>MkDB</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/home" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/stores" class="nav-link active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span>Stores</span>
+                </a>
+                <a href="/config" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                <a href="/security" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Security</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-row">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Running</span>
+                </div>
+                <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Sign out</button>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="topbar">
+                <div>
+                    <div class="topbar-title">Stores</div>
+                    <div class="topbar-sub" id="storeCountSub">Manage data stores</div>
+                </div>
+                <button class="btn btn-primary" onclick="openNewModal()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    New Store
+                </button>
+            </div>
+            <div class="content">
+                <div id="loadingRow" class="loading-row">
+                    <div class="spinner"></div><span>Loading stores...</span>
+                </div>
+                <div id="storeList" class="store-list" style="display:none"></div>
+                <div id="emptyState" class="empty-state" style="display:none">
+                    <div class="empty-state-icon">&#128448;</div>
+                    <h3>No stores yet</h3>
+                    <p>Click "New Store" to create your first data store.</p>
+                </div>
+
+                <!-- RAM Cache Overview -->
+                <div id="ramOverview" style="display:none; margin-top:1.5rem">
+                    <div class="section-heading">RAM Cache &mdash; All Stores</div>
+                    <div class="ram-overview-card">
+                        <table class="ram-table">
+                            <thead>
+                                <tr>
+                                    <th>Store</th>
+                                    <th>Entries</th>
+                                    <th style="min-width:120px">Usage</th>
+                                    <th>Estimated Size</th>
+                                    <th>Eviction</th>
+                                    <th>Reads</th>
+                                    <th>Writes</th>
+                                    <th>Queries</th>
+                                    <th>Bytes Out</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ramTableBody">
+                                <tr>
+                                    <td colspan="9" style="text-align:center;color:var(--text-dim);padding:1rem">Loading&hellip;</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="ram-overview-footer">
+                            <span id="ramLastUpdated"></span>
+                            <button class="btn btn-sm" onclick="loadRamOverview()">&#8635; Refresh</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW STORE MODAL -->
+    <div class="modal-overlay" id="newModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>New Store</h3>
+                <button class="modal-close" onclick="closeModal('newModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="newName">Store Name</label>
+                <input type="text" id="newName" placeholder="e.g. products_v1" autocomplete="off" oninput="validateNewName()">
+                <span class="field-error" id="newNameErr"></span>
+                <span class="hint">Lowercase letters, numbers, and underscores only. No leading/trailing or consecutive underscores.</span>
+            </div>
+            <div class="form-group">
+                <label for="newDesc">Description <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
+                <textarea id="newDesc" rows="2" placeholder="Brief description of this store"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('newModal')">Cancel</button>
+                <button class="btn btn-primary" id="newSubmitBtn" onclick="submitNew()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT MODAL -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Edit Store</h3>
+                <button class="modal-close" onclick="closeModal('editModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="editName">Store Name</label>
+                <input type="text" id="editName" disabled>
+            </div>
+            <div class="form-group">
+                <label for="editDesc">Description</label>
+                <textarea id="editDesc" rows="2" placeholder="Brief description of this store"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('editModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="submitEdit()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DELETE MODAL -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Delete Store</h3>
+                <button class="modal-close" onclick="closeModal('deleteModal')">&times;</button>
+            </div>
+            <div class="warning-text">
+                This action cannot be undone. The store configuration will be permanently removed.
+            </div>
+            <p style="font-size:0.875rem;color:var(--text-muted)">You are about to delete store: <strong id="deleteStoreName" style="color:var(--text)"></strong></p>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('deleteModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="submitDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script>
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function api(action, data) {
+            data = data || {};
+            const res = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ action }, data))
+            });
+            if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthenticated'); }
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message || 'Server error');
+            return json.result;
+        }
+
+        function toast(msg, type, dur) {
+            type = type || 'info'; dur = dur || 3500;
+            const el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = msg;
+            document.getElementById('toastContainer').appendChild(el);
+            requestAnimationFrame(function () { el.classList.add('show'); });
+            setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 300); }, dur);
+        }
+
+        async function initAuth() {
+            try {
+                const res = await fetch('/auth/status');
+                const d = await res.json();
+                if (d.enabled) document.getElementById('logoutBtn').style.display = '';
+            } catch (e) { }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            document.cookie = 'mkdb_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            window.location.href = '/login';
+        }
+
+        let stores = [];
+        let editingStore = null;
+        let deletingStore = null;
+        let storeMetrics = {};
+
+        function fmtNum(n) {
+            return Number(n || 0).toLocaleString();
+        }
+
+        function fmtBytes(n) {
+            n = Number(n) || 0;
+            if (n < 1024) return n + ' B';
+            if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+            if (n < 1073741824) return (n / 1048576).toFixed(2) + ' MB';
+            return (n / 1073741824).toFixed(2) + ' GB';
+        }
+
+        const NAME_RE = /^[a-z0-9]+(_[a-z0-9]+)*$/;
+
+        function validateStoreName(val) {
+            if (!val) return 'Store name is required.';
+            if (val.length < 2) return 'Name must be at least 2 characters.';
+            if (!NAME_RE.test(val)) {
+                if (/[A-Z]/.test(val)) return 'Name must be lowercase only.';
+                if (/[^a-z0-9_]/.test(val)) return 'Only letters, numbers, and underscores allowed.';
+                if (val.startsWith('_') || val.endsWith('_')) return 'Name cannot start or end with an underscore.';
+                if (/__/.test(val)) return 'Consecutive underscores are not allowed.';
+                return 'Invalid store name format.';
+            }
+            return '';
+        }
+
+        function validateNewName() {
+            const val = document.getElementById('newName').value.trim();
+            const err = validateStoreName(val);
+            const errEl = document.getElementById('newNameErr');
+            if (err) { errEl.textContent = err; errEl.classList.add('show'); }
+            else { errEl.textContent = ''; errEl.classList.remove('show'); }
+            return !err;
+        }
+
+        function renderStores() {
+            const list = document.getElementById('storeList');
+            const empty = document.getElementById('emptyState');
+            if (!stores.length) {
+                list.style.display = 'none';
+                empty.style.display = '';
+                document.getElementById('storeCountSub').textContent = 'No stores configured';
+                return;
+            }
+            empty.style.display = 'none';
+            list.style.display = '';
+            document.getElementById('storeCountSub').textContent = stores.length + ' store' + (stores.length !== 1 ? 's' : '') + ' configured';
+            list.innerHTML = stores.map(function (s) {
+                const desc = s.description || s.desc || '';
+                const ram = storeMetrics[s.name] ? storeMetrics[s.name].ram_cache : null;
+                let ramHtml = '';
+                if (ram) {
+                    const entries = ram.entries || 0;
+                    const maxSize = ram.max_size || 0;
+                    const pct = maxSize > 0 ? Math.min(100, (entries / maxSize) * 100) : 0;
+                    const fillClass = pct >= 95 ? 'ram-full' : pct >= 75 ? 'ram-high' : '';
+                    const label = fmtNum(entries) + ' / ' + (maxSize > 0 ? fmtNum(maxSize) : '\u221e') + ' cached';
+                    ramHtml = '<div class="store-card-ram">' +
+                        '<div class="ram-inline-track"><div class="ram-inline-fill ' + fillClass + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+                        '<span>' + label + '</span>' +
+                        (ram.estimated_bytes ? '<span style="opacity:0.6">&middot; ~' + fmtBytes(ram.estimated_bytes) + '</span>' : '') +
+                        '</div>';
+                }
+                return '<div class="store-card">' +
+                    '<div class="store-card-info">' +
+                    '<div class="store-card-name"><span class="store-dot"></span>' + escapeHtml(s.name) + '</div>' +
+                    '<div class="store-card-desc">' + (desc ? escapeHtml(desc) : '<em style="color:var(--text-dim)">No description</em>') + '</div>' +
+                    ramHtml +
+                    '</div>' +
+                    '<div class="store-card-actions">' +
+                    '<a href="/store-config?store=' + encodeURIComponent(s.name) + '" class="btn btn-secondary btn-icon">Configure &#8250;</a>' +
+                    '<button class="btn btn-ghost btn-icon" onclick="openEditModal(\'' + escapeHtml(s.name).replace(/'/g, "\\'") + '\')">Edit</button>' +
+                    '<button class="btn btn-danger btn-icon" onclick="openDeleteModal(\'' + escapeHtml(s.name).replace(/'/g, "\\'") + '\')">Delete</button>' +
+                    '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        async function loadStores() {
+            try {
+                const result = await api('api_list_stores');
+                stores = Array.isArray(result) ? result : (result.stores || []);
+                document.getElementById('loadingRow').style.display = 'none';
+                // Fetch metrics in parallel; don't fail loadStores if metrics unavailable
+                try {
+                    const allMetrics = await api('api_get_all_store_metrics');
+                    if (Array.isArray(allMetrics)) {
+                        allMetrics.forEach(function (m) { storeMetrics[m.name] = m; });
+                    }
+                } catch (e) { /* metrics not critical */ }
+                renderStores();
+                renderRamOverview();
+            } catch (e) {
+                document.getElementById('loadingRow').style.display = 'none';
+                toast('Failed to load stores: ' + e.message, 'error');
+                document.getElementById('storeList').style.display = '';
+                document.getElementById('emptyState').style.display = 'none';
+            }
+        }
+
+        function openModal(id) { document.getElementById(id).classList.add('open'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+        function renderRamOverview() {
+            const panel = document.getElementById('ramOverview');
+            const tbody = document.getElementById('ramTableBody');
+            const names = Object.keys(storeMetrics);
+            if (names.length === 0) {
+                panel.style.display = 'none';
+                return;
+            }
+            panel.style.display = '';
+            tbody.innerHTML = names.map(function (name) {
+                const m = storeMetrics[name];
+                const rc = m.ram_cache || {};
+                const entries = rc.entries || 0;
+                const maxSize = rc.max_size || 0;
+                const pct = maxSize > 0 ? Math.min(100, (entries / maxSize) * 100) : 0;
+                const fillClass = pct >= 95 ? 'ram-full' : pct >= 75 ? 'ram-high' : '';
+                return '<tr>' +
+                    '<td><a href="/store-config?store=' + encodeURIComponent(name) + '&tab=stats" style="color:var(--blue-light);text-decoration:none">' + escapeHtml(name) + '</a></td>' +
+                    '<td>' + fmtNum(entries) + ' / ' + (maxSize > 0 ? fmtNum(maxSize) : '&infin;') + '</td>' +
+                    '<td><div class="ram-bar-track"><div class="ram-bar-fill ' + fillClass + '" style="width:' + pct.toFixed(1) + '%"></div></div></td>' +
+                    '<td>' + (rc.estimated_bytes ? fmtBytes(rc.estimated_bytes) : '&mdash;') + '</td>' +
+                    '<td>' + (rc.clean_type ? rc.clean_type.toUpperCase() : '&mdash;') + '</td>' +
+                    '<td>' + fmtNum(m.reads) + '</td>' +
+                    '<td>' + fmtNum(m.writes) + '</td>' +
+                    '<td>' + fmtNum(m.queries) + '</td>' +
+                    '<td>' + fmtBytes(m.bytes_out) + '</td>' +
+                    '</tr>';
+            }).join('');
+            const ts = new Date().toLocaleTimeString();
+            document.getElementById('ramLastUpdated').textContent = 'Updated ' + ts;
+        }
+
+        async function loadRamOverview() {
+            try {
+                const allMetrics = await api('api_get_all_store_metrics');
+                if (Array.isArray(allMetrics)) {
+                    storeMetrics = {};
+                    allMetrics.forEach(function (m) { storeMetrics[m.name] = m; });
+                }
+                renderRamOverview();
+            } catch (e) {
+                toast('Failed to refresh metrics: ' + e.message, 'error');
+            }
+        }
+
+        function openNewModal() {
+            document.getElementById('newName').value = '';
+            document.getElementById('newDesc').value = '';
+            document.getElementById('newNameErr').textContent = '';
+            document.getElementById('newNameErr').classList.remove('show');
+            openModal('newModal');
+            setTimeout(function () { document.getElementById('newName').focus(); }, 50);
+        }
+
+        async function submitNew() {
+            if (!validateNewName()) return;
+            const name = document.getElementById('newName').value.trim();
+            const desc = document.getElementById('newDesc').value.trim();
+            const btn = document.getElementById('newSubmitBtn');
+            btn.disabled = true;
+            try {
+                await api('api_create_store', { name: name, description: desc });
+                closeModal('newModal');
+                toast('Store "' + name + '" created.', 'success');
+                await loadStores();
+            } catch (e) {
+                toast('Failed to create store: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function openEditModal(name) {
+            const store = stores.find(function (s) { return s.name === name; });
+            if (!store) return;
+            editingStore = store;
+            document.getElementById('editName').value = store.name;
+            document.getElementById('editDesc').value = store.description || store.desc || '';
+            openModal('editModal');
+            setTimeout(function () { document.getElementById('editDesc').focus(); }, 50);
+        }
+
+        async function submitEdit() {
+            if (!editingStore) return;
+            const desc = document.getElementById('editDesc').value.trim();
+            try {
+                await api('api_update_store', { name: editingStore.name, description: desc });
+                closeModal('editModal');
+                toast('Store updated.', 'success');
+                await loadStores();
+            } catch (e) {
+                toast('Failed to update store: ' + e.message, 'error');
+            }
+        }
+
+        function openDeleteModal(name) {
+            deletingStore = name;
+            document.getElementById('deleteStoreName').textContent = name;
+            openModal('deleteModal');
+        }
+
+        async function submitDelete() {
+            if (!deletingStore) return;
+            const name = deletingStore;
+            try {
+                await api('api_delete_store', { name: name });
+                closeModal('deleteModal');
+                toast('Store "' + name + '" deleted.', 'success');
+                deletingStore = null;
+                await loadStores();
+            } catch (e) {
+                toast('Failed to delete store: ' + e.message, 'error');
+            }
+        }
+
+        document.querySelectorAll('.modal-overlay').forEach(function (overlay) {
+            overlay.addEventListener('click', function (e) {
+                if (e.target === overlay) overlay.classList.remove('open');
+            });
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.open').forEach(function (m) { m.classList.remove('open'); });
+            }
+        });
+
+        window.addEventListener('load', function () {
+            initAuth();
+            loadStores();
+        });
+    </script>
+</body>
+
+</html>

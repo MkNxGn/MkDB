@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyMkDB"
+version = "0.1.0"
+description = "A log-structured, partitioned NoSQL database engine with full-text search, numeric indexes, and dual TCP/HTTP protocols."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "MNG" }
+]
+keywords = ["database", "nosql", "document-store", "full-text-search", "log-structured"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Database :: Database Engines/Servers",
+]
+dependencies = [
+    "colorama>=0.4.6",
+    "reedsolo>=1.7.0",
+]
+
+[project.scripts]
+mkdb = "pymkdb.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/MNG/MkDB"
+Repository = "https://github.com/MNG/MkDB"
+
+[tool.setuptools.packages.find]
+include = ["pymkdb*", "src*", "sdk*"]

@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MkDB &mdash; Query</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --sidebar: #080e1c;
+            --panel: #1e293b;
+            --border: #334155;
+            --border-mid: #475569;
+            --blue: #3b82f6;
+            --blue-dim: rgba(59, 130, 246, 0.12);
+            --blue-light: #60a5fa;
+            --text: #e2e8f0;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 1.25rem 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand-icon {
+            width: 22px;
+            height: 22px;
+            color: var(--blue-light);
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand span {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: 0.02em;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 0.75rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.6rem 1.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link svg {
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+        }
+
+        .nav-link:hover {
+            background: var(--blue-dim);
+            color: var(--text);
+            border-left-color: var(--border-mid);
+        }
+
+        .nav-link.active {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border-left-color: var(--blue);
+        }
+
+        .sidebar-footer {
+            padding: 0.75rem 1.25rem 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.15s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            padding: 1rem 1.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: var(--bg);
+        }
+
+        .topbar-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .topbar-sub {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 1px;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.75rem;
+        }
+
+        /* BUTTONS */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.55rem 1.1rem;
+            border: none;
+            border-radius: 7px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-secondary {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border: 1px solid var(--blue);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--border-mid);
+            color: var(--text);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* FORMS */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+        }
+
+        label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input,
+        select,
+        textarea {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-mid);
+            border-radius: 7px;
+            color: var(--text);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-family: inherit;
+            width: 100%;
+            transition: border-color 0.15s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+
+        select option {
+            background: #1e293b;
+        }
+
+        .hint {
+            font-size: 0.73rem;
+            color: var(--text-dim);
+        }
+
+        .field-error {
+            font-size: 0.73rem;
+            color: #f87171;
+            display: none;
+        }
+
+        .field-error.show {
+            display: block;
+        }
+
+        /* QUERY PANEL */
+        .query-panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .query-panel h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--blue);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .checkbox-row label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-top: 0.25rem;
+        }
+
+        /* ERROR BANNER */
+        .error-banner {
+            display: none;
+            background: rgba(239, 68, 68, 0.07);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            border-left: 3px solid var(--red);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            color: #fca5a5;
+            margin-bottom: 1.25rem;
+        }
+
+        .error-banner.show {
+            display: block;
+        }
+
+        /* RESULTS PANEL */
+        .results-panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            display: none;
+        }
+
+        .results-panel.show {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.875rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .results-header h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .results-meta {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+        }
+
+        .results-body {
+            padding: 1rem 1.25rem;
+        }
+
+        .results-body pre {
+            font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
+            font-size: 0.82rem;
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.6;
+            max-height: 480px;
+            overflow-y: auto;
+        }
+
+        /* SPINNER */
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: none;
+        }
+
+        .spinner.show {
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* TOAST */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text);
+            max-width: 320px;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.25s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--green);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--red);
+        }
+
+        .toast-info {
+            border-left: 3px solid var(--blue);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span>MkDB</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/home" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/stores" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span>Stores</span>
+                </a>
+                <a href="/query" class="nav-link active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        <line x1="11" y1="8" x2="11" y2="14" />
+                        <line x1="8" y1="11" x2="14" y2="11" />
+                    </svg>
+                    <span>Query</span>
+                </a>
+                <a href="/config" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                <a href="/security" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Security</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-row">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Running</span>
+                </div>
+                <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Sign out</button>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="topbar">
+                <div>
+                    <div class="topbar-title">Query</div>
+                    <div class="topbar-sub">Run filter queries against a store</div>
+                </div>
+            </div>
+
+            <div class="content">
+                <!-- ERROR BANNER -->
+                <div class="error-banner" id="errorBanner"></div>
+
+                <!-- QUERY FORM -->
+                <form class="query-panel" id="queryForm" onsubmit="return false;">
+                    <h2>Query Builder</h2>
+
+                    <!-- 1. Store dropdown -->
+                    <div class="form-group">
+                        <label for="storeSelect">Store</label>
+                        <select id="storeSelect">
+                            <option value="">— loading stores —</option>
+                        </select>
+                    </div>
+
+                    <!-- 2. Filter textarea -->
+                    <div class="form-group">
+                        <label for="filterInput">Filter</label>
+                        <textarea id="filterInput" rows="10" placeholder='{"price": {"gte": 10, "lte": 100}}'></textarea>
+                        <span class="field-error" id="filterError"></span>
+                        <span class="hint">JSON object passed directly to the store's query engine.</span>
+                    </div>
+
+                    <!-- 3. Hydrate checkbox -->
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="hydrateCheck">
+                        <label for="hydrateCheck">Hydrate — return full records instead of IDs</label>
+                    </div>
+
+                    <!-- 4. Run Query button + spinner -->
+                    <div class="action-row">
+                        <button class="btn btn-primary" id="runBtn" onclick="runQuery()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <polygon points="5 3 19 12 5 21 5 3" />
+                            </svg>
+                            Run Query
+                        </button>
+                        <div class="spinner" id="spinner"></div>
+                    </div>
+                </form>
+
+                <!-- RESULTS PANEL -->
+                <div class="results-panel" id="resultsPanel">
+                    <div class="results-header">
+                        <h3>Results</h3>
+                        <div style="display:flex;align-items:center;gap:0.75rem;">
+                            <span class="results-meta" id="resultsMeta"></span>
+                            <!-- 5. Copy button -->
+                            <button class="btn btn-ghost" style="padding:0.35rem 0.7rem;font-size:0.78rem;" onclick="copyResults()">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                    <div class="results-body">
+                        <pre id="resultsOutput"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script>
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function api(action, data) {
+            data = data || {};
+            const res = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ action: action }, data))
+            });
+            if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthenticated'); }
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message || 'Server error');
+            return json.result;
+        }
+
+        function toast(msg, type, dur) {
+            type = type || 'info'; dur = dur || 3500;
+            const el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = msg;
+            document.getElementById('toastContainer').appendChild(el);
+            requestAnimationFrame(function () { el.classList.add('show'); });
+            setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 300); }, dur);
+        }
+
+        async function initAuth() {
+            try {
+                const res = await fetch('/auth/status');
+                const d = await res.json();
+                if (d.enabled) document.getElementById('logoutBtn').style.display = '';
+            } catch (e) { }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            document.cookie = 'mkdb_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            window.location.href = '/login';
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorBanner');
+            el.textContent = msg;
+            el.classList.add('show');
+        }
+
+        function hideError() {
+            const el = document.getElementById('errorBanner');
+            el.textContent = '';
+            el.classList.remove('show');
+        }
+
+        async function loadStores() {
+            try {
+                const result = await api('api_list_stores');
+                const stores = Array.isArray(result) ? result : (result.stores || []);
+                const sel = document.getElementById('storeSelect');
+                sel.innerHTML = '';
+                if (!stores.length) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = '— no stores configured —';
+                    sel.appendChild(opt);
+                    return;
+                }
+                stores.forEach(function (s) {
+                    const opt = document.createElement('option');
+                    opt.value = s.name;
+                    opt.textContent = s.name + (s.description ? ' — ' + s.description : '');
+                    sel.appendChild(opt);
+                });
+            } catch (e) {
+                const sel = document.getElementById('storeSelect');
+                sel.innerHTML = '<option value="">— failed to load stores —</option>';
+                toast('Could not load stores: ' + e.message, 'error');
+            }
+        }
+
+        async function runQuery() {
+            hideError();
+
+            const store = document.getElementById('storeSelect').value;
+            const filterRaw = document.getElementById('filterInput').value.trim();
+            const hydrate = document.getElementById('hydrateCheck').checked;
+            const filterErrEl = document.getElementById('filterError');
+            const runBtn = document.getElementById('runBtn');
+            const spinner = document.getElementById('spinner');
+
+            // Validate store
+            if (!store) {
+                showError('Please select a store before running a query.');
+                return;
+            }
+
+            // Validate filter JSON (client-side, using JSON.parse — no eval)
+            let filterObj = {};
+            if (filterRaw) {
+                try {
+                    filterObj = JSON.parse(filterRaw);
+                    if (typeof filterObj !== 'object' || Array.isArray(filterObj) || filterObj === null) {
+                        throw new TypeError('Filter must be a JSON object, not an array or primitive.');
+                    }
+                } catch (e) {
+                    filterErrEl.textContent = 'Invalid JSON: ' + e.message;
+                    filterErrEl.classList.add('show');
+                    return;
+                }
+            }
+            filterErrEl.textContent = '';
+            filterErrEl.classList.remove('show');
+
+            // Show spinner, disable button
+            runBtn.disabled = true;
+            spinner.classList.add('show');
+            document.getElementById('resultsPanel').classList.remove('show');
+
+            try {
+                const result = await api('api_query_store', {
+                    store: store,
+                    filter: filterObj,
+                    hydrate: hydrate
+                });
+
+                // result may be the inner dict from api_query_store
+                const inner = (result && typeof result === 'object') ? result : {};
+
+                if (inner.success === false) {
+                    showError(inner.error || 'Query failed.');
+                } else {
+                    const count = inner.count !== undefined ? inner.count : '?';
+                    document.getElementById('resultsMeta').textContent = count + ' result' + (count !== 1 ? 's' : '');
+                    document.getElementById('resultsOutput').textContent = JSON.stringify(inner, null, 2);
+                    document.getElementById('resultsPanel').classList.add('show');
+                }
+            } catch (e) {
+                showError('Request failed: ' + e.message);
+            } finally {
+                runBtn.disabled = false;
+                spinner.classList.remove('show');
+            }
+        }
+
+        function copyResults() {
+            const text = document.getElementById('resultsOutput').textContent;
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(function () {
+                toast('Results copied to clipboard.', 'success');
+            }).catch(function () {
+                toast('Copy failed — clipboard access denied.', 'error');
+            });
+        }
+
+        window.addEventListener('load', function () {
+            initAuth();
+            loadStores();
+        });
+    </script>
+</body>
+
+</html>

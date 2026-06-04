@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MkDB &mdash; Security</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --sidebar: #080e1c;
+            --panel: #1e293b;
+            --border: #334155;
+            --border-mid: #475569;
+            --blue: #3b82f6;
+            --blue-dim: rgba(59, 130, 246, 0.12);
+            --blue-light: #60a5fa;
+            --text: #e2e8f0;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 1.25rem 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand-icon {
+            width: 22px;
+            height: 22px;
+            color: var(--blue-light);
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand span {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: 0.02em;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 0.75rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.6rem 1.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link svg {
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+        }
+
+        .nav-link:hover {
+            background: var(--blue-dim);
+            color: var(--text);
+            border-left-color: var(--border-mid);
+        }
+
+        .nav-link.active {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border-left-color: var(--blue);
+        }
+
+        .sidebar-footer {
+            padding: 0.75rem 1.25rem 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.15s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            padding: 1rem 1.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: var(--bg);
+        }
+
+        .topbar-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .topbar-sub {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 1px;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        /* CARD */
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+        }
+
+        .card-header {
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 0.2rem;
+        }
+
+        .card-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* BUTTONS */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.55rem 1.1rem;
+            border: none;
+            border-radius: 7px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-secondary {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border: 1px solid var(--blue);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+            border: 1px solid var(--red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.22);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--border-mid);
+            color: var(--text);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* BADGES */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .badge-green {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-dim {
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+        }
+
+        /* AUTH STATUS (badge only) */
+        /* USERS TABLE */
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .users-table th {
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .users-table td {
+            padding: 0.7rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        .users-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .store-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: var(--blue-dim);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            color: var(--blue-light);
+            border-radius: 12px;
+            padding: 0.15rem 0.5rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            margin: 0.1rem 0.15rem;
+        }
+
+        .store-pill.write {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: var(--green);
+        }
+
+        .btn-sm {
+            padding: 0.35rem 0.7rem;
+            font-size: 0.78rem;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .empty-state {
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            padding: 1rem 0;
+            text-align: center;
+        }
+
+        /* WARNING BANNER */
+        .warning-banner {
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            border-radius: 8px;
+            padding: 0.875rem 1rem;
+            font-size: 0.82rem;
+            color: #fcd34d;
+            line-height: 1.5;
+            display: none;
+        }
+
+        .warning-banner.show {
+            display: block;
+        }
+
+        /* TOGGLE */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .toggle-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .toggle-info strong {
+            font-size: 0.875rem;
+            color: var(--text);
+        }
+
+        .toggle-info span {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .switch-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--border-mid);
+            border-radius: 24px;
+            transition: 0.2s;
+            cursor: pointer;
+        }
+
+        .switch-slider::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+        .switch input:checked+.switch-slider {
+            background: var(--blue);
+        }
+
+        .switch input:checked+.switch-slider::before {
+            transform: translateX(20px);
+        }
+
+        /* FORMS */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+        }
+
+        label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-mid);
+            border-radius: 7px;
+            color: var(--text);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-family: inherit;
+            width: 100%;
+            transition: border-color 0.15s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+
+        .field-error {
+            font-size: 0.73rem;
+            color: #f87171;
+            display: none;
+        }
+
+        .field-error.show {
+            display: block;
+        }
+
+        .hint {
+            font-size: 0.73rem;
+            color: var(--text-dim);
+        }
+
+        /* PASSWORD DISPLAY */
+        .pwd-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .pwd-status-text {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .pwd-status-text span {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .pwd-check {
+            color: var(--green);
+            font-size: 1rem;
+        }
+
+        /* SESSIONS */
+        .stat-row {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .stat-item-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        .stat-item-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-heading);
+        }
+
+        .divider {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 1.25rem 0;
+        }
+
+        .save-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+
+        /* MODAL */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.75rem;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .modal-footer .btn {
+            flex: 1;
+        }
+
+        /* SPINNER */
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+
+        /* TOAST */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text);
+            max-width: 320px;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.25s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--green);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--red);
+        }
+
+        .toast-info {
+            border-left: 3px solid var(--blue);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span>MkDB</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/home" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/stores" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span>Stores</span>
+                </a>
+                <a href="/config" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                <a href="/security" class="nav-link active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Security</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-row">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Running</span>
+                </div>
+                <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Sign out</button>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="topbar">
+                <div>
+                    <div class="topbar-title">Security</div>
+                    <div class="topbar-sub">Authentication &amp; session management</div>
+                </div>
+            </div>
+            <div class="content">
+                <div id="loadingRow" class="loading-row">
+                    <div class="spinner"></div><span>Loading security settings...</span>
+                </div>
+
+                <!-- CARD 1: CONTROL PANEL ACCESS (auth toggle + password — merged) -->
+                <div class="card" id="authCard" style="display:none">
+                    <div class="card-header">
+                        <div style="display:flex;align-items:center;justify-content:space-between">
+                            <div>
+                                <div class="card-title">Control Panel Access</div>
+                                <div class="card-desc">Password protection for this admin interface.</div>
+                            </div>
+                            <span id="authStatusBadge"></span>
+                        </div>
+                    </div>
+                    <div class="warning-banner" id="authWarningBanner">
+                        &#9888; Without authentication, anyone with network access can control this database.
+                    </div>
+                    <div class="toggle-row" style="margin-bottom:1.25rem">
+                        <div class="toggle-info">
+                            <strong>Require Password</strong>
+                            <span>Protect the control panel with a password</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="authEnabledSwitch" onchange="handleAuthToggle(this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <hr class="divider">
+                    <div class="pwd-status">
+                        <div class="pwd-status-text">
+                            <span id="pwdStatusLabel">Loading...</span>
+                        </div>
+                        <button class="btn btn-secondary" id="pwdActionBtn" onclick="openSetPwdModal()">Set Password</button>
+                    </div>
+                </div>
+
+                <!-- CARD 2: SESSIONS -->
+                <div class="card" id="sessCard" style="display:none">
+                    <div class="card-header">
+                        <div class="card-title">Sessions</div>
+                        <div class="card-desc">Manage active login sessions and session lifetime.</div>
+                    </div>
+                    <div class="stat-row">
+                        <div class="stat-item">
+                            <div class="stat-item-label">Active Sessions</div>
+                            <div class="stat-item-value" id="activeSessionCount">&mdash;</div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="sessionTtl">Session TTL (seconds)</label>
+                        <input type="number" id="sessionTtl" min="60" placeholder="3600">
+                        <span class="hint">Minimum: 60 seconds. Sessions expire after this duration of inactivity.</span>
+                    </div>
+                    <div class="save-row" style="justify-content:space-between;align-items:center">
+                        <button class="btn btn-danger" onclick="invalidateAllSessions()">Invalidate All Sessions</button>
+                        <button class="btn btn-primary" onclick="saveSessionTtl()">Save TTL</button>
+                    </div>
+                </div>
+
+                <!-- CARD 4: USERS (data-plane) -->
+                <div class="card" id="usersCard" style="display:none">
+                    <div class="card-header">
+                        <div style="display:flex;align-items:center;justify-content:space-between">
+                            <div>
+                                <div class="card-title">Store Access Users</div>
+                                <div class="card-desc">Data-plane users. When any user is defined, write requests (and reads when protected) require HTTP Basic authentication.</div>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="openAddUserModal()">+ Add User</button>
+                        </div>
+                    </div>
+                    <div id="usersEmpty" class="empty-state" style="display:none">No users defined. Add a user to enable data-plane authentication.</div>
+                    <table class="users-table" id="usersTable" style="display:none">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Store Access</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+
+                <!-- CARD 5: CONTROL USERS (SDK / RBAC) -->
+                <div class="card" id="controlUsersCard" style="display:none">
+                    <div class="card-header">
+                        <div style="display:flex;align-items:center;justify-content:space-between">
+                            <div>
+                                <div class="card-title">Control Users</div>
+                                <div class="card-desc">Role-based users that authenticate to the control API via Bearer token. Roles: <strong>viewer</strong> (read-only), <strong>operator</strong> (manage stores), <strong>admin</strong> (full access).</div>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="openAddControlUserModal()">+ Add</button>
+                        </div>
+                    </div>
+                    <div id="controlUsersEmpty" class="empty-state" style="display:none">No control users defined.</div>
+                    <table class="users-table" id="controlUsersTable" style="display:none">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="controlUsersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTROL PANEL PASSWORD MODAL -->
+    <div class="modal-overlay" id="setPwdModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="setPwdTitle">Set Password</h3>
+                <button class="modal-close" onclick="closeModal('setPwdModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="newPwd">New Password</label>
+                <input type="password" id="newPwd" placeholder="Enter new password" autocomplete="new-password" oninput="checkPwdMatch()">
+            </div>
+            <div class="form-group">
+                <label for="confirmPwd">Confirm Password</label>
+                <input type="password" id="confirmPwd" placeholder="Confirm new password" autocomplete="new-password" oninput="checkPwdMatch()">
+                <span class="field-error" id="pwdMatchErr">Passwords do not match</span>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('setPwdModal')">Cancel</button>
+                <button class="btn btn-primary" id="setPwdSubmitBtn" onclick="submitSetPassword()">Set Password</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD USER MODAL -->
+    <div class="modal-overlay" id="addUserModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Add User</h3>
+                <button class="modal-close" onclick="closeModal('addUserModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="newUsername">Username</label>
+                <input type="text" id="newUsername" placeholder="Enter username" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="newUserPwd">Password</label>
+                <input type="password" id="newUserPwd" placeholder="Min. 6 characters" autocomplete="new-password">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('addUserModal')">Cancel</button>
+                <button class="btn btn-primary" id="addUserSubmitBtn" onclick="submitAddUser()">Create User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHANGE USER PASSWORD MODAL -->
+    <div class="modal-overlay" id="userPwdModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Change Password — <span id="userPwdUsername"></span></h3>
+                <button class="modal-close" onclick="closeModal('userPwdModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="userNewPwd">New Password</label>
+                <input type="password" id="userNewPwd" placeholder="Min. 6 characters" autocomplete="new-password">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('userPwdModal')">Cancel</button>
+                <button class="btn btn-primary" id="userPwdSubmitBtn" onclick="submitUserPassword()">Update Password</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MANAGE STORE ACCESS MODAL -->
+    <div class="modal-overlay" id="storeAccessModal">
+        <div class="modal" style="max-width:520px">
+            <div class="modal-header">
+                <h3>Store Access — <span id="storeAccessUsername"></span></h3>
+                <button class="modal-close" onclick="closeModal('storeAccessModal')">&times;</button>
+            </div>
+            <div id="storeAccessCurrentList" style="margin-bottom:1rem"></div>
+            <hr class="divider">
+            <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="flex:1;min-width:120px;margin-bottom:0">
+                    <label for="storeAccessSelect">Add Store</label>
+                    <select id="storeAccessSelect" style="background:rgba(30,41,59,0.6);border:1px solid var(--border-mid);border-radius:7px;color:var(--text);padding:0.6rem 0.75rem;font-size:0.875rem;width:100%"></select>
+                </div>
+                <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.8rem;font-weight:600;color:var(--text-muted);cursor:pointer;white-space:nowrap">
+                    <input type="checkbox" id="storeAccessRead" checked> Read
+                </label>
+                <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.8rem;font-weight:600;color:var(--text-muted);cursor:pointer;white-space:nowrap">
+                    <input type="checkbox" id="storeAccessWrite"> Write
+                </label>
+                <button class="btn btn-secondary btn-sm" onclick="submitStoreAccess()">Grant</button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" style="flex:1" onclick="closeModal('storeAccessModal')">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD CONTROL USER MODAL -->
+    <div class="modal-overlay" id="addControlUserModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Add SDK / Control User</h3>
+                <button class="modal-close" onclick="closeModal('addControlUserModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="newCtrlUsername">Username</label>
+                <input type="text" id="newCtrlUsername" placeholder="Enter username" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="newCtrlPwd">Password</label>
+                <input type="password" id="newCtrlPwd" placeholder="Min. 6 characters" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label for="newCtrlRole">Role</label>
+                <select id="newCtrlRole" style="background:rgba(30,41,59,0.6);border:1px solid var(--border-mid);border-radius:7px;color:var(--text);padding:0.6rem 0.75rem;font-size:0.875rem;width:100%">
+                    <option value="viewer">Viewer — read-only access to configs and logs</option>
+                    <option value="operator">Operator — manage stores and configs</option>
+                    <option value="admin">Admin — full control access</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('addControlUserModal')">Cancel</button>
+                <button class="btn btn-primary" id="addCtrlUserSubmitBtn" onclick="submitAddControlUser()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHANGE CONTROL USER PASSWORD MODAL -->
+    <div class="modal-overlay" id="ctrlUserPwdModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Change Password — <span id="ctrlUserPwdName"></span></h3>
+                <button class="modal-close" onclick="closeModal('ctrlUserPwdModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="ctrlUserNewPwd">New Password</label>
+                <input type="password" id="ctrlUserNewPwd" placeholder="Min. 6 characters" autocomplete="new-password">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('ctrlUserPwdModal')">Cancel</button>
+                <button class="btn btn-primary" id="ctrlUserPwdSubmitBtn" onclick="submitControlUserPwd()">Update</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script>
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function api(action, data) {
+            data = data || {};
+            const res = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ action }, data))
+            });
+            if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthenticated'); }
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message || 'Server error');
+            return json.result;
+        }
+
+        function toast(msg, type, dur) {
+            type = type || 'info'; dur = dur || 3500;
+            const el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = msg;
+            document.getElementById('toastContainer').appendChild(el);
+            requestAnimationFrame(function () { el.classList.add('show'); });
+            setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 300); }, dur);
+        }
+
+        async function initAuth() {
+            try {
+                const res = await fetch('/auth/status');
+                const d = await res.json();
+                if (d.enabled) document.getElementById('logoutBtn').style.display = '';
+            } catch (e) { }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            document.cookie = 'mkdb_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            window.location.href = '/login';
+        }
+
+        var authState = {};
+
+        function applyAuthState(d) {
+            authState = d;
+            var enabled = !!(d.enabled);
+            var hasPassword = !!(d.has_password);
+
+            document.getElementById('authStatusBadge').innerHTML = enabled
+                ? '<span class="badge badge-green">Protected</span>'
+                : '<span class="badge badge-dim">Open</span>';
+
+            var banner = document.getElementById('authWarningBanner');
+            if (!enabled) { banner.classList.add('show'); } else { banner.classList.remove('show'); }
+
+            document.getElementById('authEnabledSwitch').checked = enabled;
+
+            var hasPassEl = document.getElementById('pwdStatusLabel');
+            var btn = document.getElementById('pwdActionBtn');
+            if (hasPassword) {
+                hasPassEl.innerHTML = '<span class="pwd-check">&#10003;</span> Password configured';
+                btn.textContent = 'Change Password';
+            } else {
+                hasPassEl.textContent = 'No password set';
+                btn.textContent = 'Set Password';
+            }
+
+            if (d.session_ttl !== undefined) {
+                document.getElementById('sessionTtl').value = d.session_ttl;
+            }
+            if (d.active_sessions !== undefined) {
+                document.getElementById('activeSessionCount').textContent = d.active_sessions;
+            }
+        }
+
+        async function loadSecurity() {
+            try {
+                const d = await api('api_get_auth_status');
+                applyAuthState(d);
+                document.getElementById('loadingRow').style.display = 'none';
+                document.getElementById('authCard').style.display = '';
+                document.getElementById('sessCard').style.display = '';
+                document.getElementById('usersCard').style.display = '';
+                document.getElementById('controlUsersCard').style.display = '';
+            } catch (e) {
+                document.getElementById('loadingRow').style.display = 'none';
+                toast('Failed to load security settings: ' + e.message, 'error');
+                document.getElementById('authCard').style.display = '';
+                document.getElementById('sessCard').style.display = '';
+                document.getElementById('usersCard').style.display = '';
+                document.getElementById('controlUsersCard').style.display = '';
+            }
+            loadUsers();
+            loadControlUsers();
+        }
+
+        async function handleAuthToggle(checked) {
+            if (checked) {
+                if (!authState.has_password) {
+                    document.getElementById('authEnabledSwitch').checked = false;
+                    openSetPwdModal(true);
+                } else {
+                    try {
+                        await api('api_enable_auth');
+                        toast('Authentication enabled.', 'success');
+                        await loadSecurity();
+                    } catch (e) {
+                        document.getElementById('authEnabledSwitch').checked = false;
+                        toast('Failed to enable auth: ' + e.message, 'error');
+                    }
+                }
+            } else {
+                try {
+                    await api('api_disable_auth');
+                    toast('Authentication disabled.', 'info');
+                    await loadSecurity();
+                } catch (e) {
+                    document.getElementById('authEnabledSwitch').checked = true;
+                    toast('Failed to disable auth: ' + e.message, 'error');
+                }
+            }
+        }
+
+        var pwdModalEnableAfter = false;
+
+        function openSetPwdModal(enableAfter) {
+            pwdModalEnableAfter = !!enableAfter;
+            document.getElementById('newPwd').value = '';
+            document.getElementById('confirmPwd').value = '';
+            document.getElementById('pwdMatchErr').classList.remove('show');
+            document.getElementById('setPwdTitle').textContent = authState.has_password ? 'Change Password' : 'Set Password';
+            document.getElementById('setPwdSubmitBtn').textContent = authState.has_password ? 'Change Password' : 'Set Password';
+            document.getElementById('setPwdModal').classList.add('open');
+            setTimeout(function () { document.getElementById('newPwd').focus(); }, 50);
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+        function checkPwdMatch() {
+            var pwd = document.getElementById('newPwd').value;
+            var conf = document.getElementById('confirmPwd').value;
+            var errEl = document.getElementById('pwdMatchErr');
+            if (conf && pwd !== conf) { errEl.classList.add('show'); }
+            else { errEl.classList.remove('show'); }
+        }
+
+        async function submitSetPassword() {
+            var pwd = document.getElementById('newPwd').value;
+            var conf = document.getElementById('confirmPwd').value;
+            if (!pwd) { toast('Please enter a password.', 'error'); return; }
+            if (pwd.length < 6) { toast('Password must be at least 6 characters.', 'error'); return; }
+            if (pwd !== conf) { toast('Passwords do not match.', 'error'); return; }
+
+            var btn = document.getElementById('setPwdSubmitBtn');
+            btn.disabled = true;
+            try {
+                await api('api_set_auth_password', { password: pwd });
+                closeModal('setPwdModal');
+                toast('Password updated successfully.', 'success');
+                if (pwdModalEnableAfter) {
+                    try {
+                        await api('api_enable_auth');
+                        toast('Authentication enabled.', 'success');
+                    } catch (e) {
+                        toast('Password set but failed to enable auth: ' + e.message, 'error');
+                    }
+                }
+                await loadSecurity();
+            } catch (e) {
+                toast('Failed to set password: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function saveSessionTtl() {
+            var ttl = parseInt(document.getElementById('sessionTtl').value, 10);
+            if (isNaN(ttl) || ttl < 60) { toast('Session TTL must be at least 60 seconds.', 'error'); return; }
+            try {
+                await api('api_set_auth_session_ttl', { ttl: ttl });
+                toast('Session TTL updated.', 'success');
+            } catch (e) {
+                toast('Failed to update TTL: ' + e.message, 'error');
+            }
+        }
+
+        async function invalidateAllSessions() {
+            try {
+                await api('api_invalidate_all_sessions');
+                toast('All sessions invalidated.', 'success');
+                await loadSecurity();
+            } catch (e) {
+                toast('Failed to invalidate sessions: ' + e.message, 'error');
+            }
+        }
+
+        // ── USER MANAGEMENT ───────────────────────────────────────────────────
+
+        var _userList = [];
+        var _storeAccessTarget = '';
+
+        async function loadUsers() {
+            try {
+                var users = await api('api_list_users');
+                _userList = users;
+                renderUsers(users);
+            } catch (e) {
+                toast('Failed to load users: ' + e.message, 'error');
+            }
+        }
+
+        function renderUsers(users) {
+            var empty = document.getElementById('usersEmpty');
+            var table = document.getElementById('usersTable');
+            var tbody = document.getElementById('usersTableBody');
+            if (!users || users.length === 0) {
+                empty.style.display = '';
+                table.style.display = 'none';
+                return;
+            }
+            empty.style.display = 'none';
+            table.style.display = '';
+            tbody.innerHTML = '';
+            users.forEach(function (u) {
+                var storeNames = Object.keys(u.stores || {});
+                var storePills = storeNames.map(function (s) {
+                    var perm = u.stores[s];
+                    var cls = perm.write ? 'store-pill write' : 'store-pill';
+                    var label = perm.write ? s + ' (r+w)' : s + ' (r)';
+                    return '<span class="' + cls + '">' + escHtml(label) + '</span>';
+                }).join('');
+
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><strong>' + escHtml(u.username) + '</strong></td>' +
+                    '<td>' + (storePills || '<span style="color:var(--text-dim);font-size:0.78rem">No access</span>') + '</td>' +
+                    '<td><div class="table-actions">' +
+                    '<button class="btn btn-secondary btn-sm" onclick="openStoreAccessModal(' + JSON.stringify(u.username) + ')">Store Access</button>' +
+                    '<button class="btn btn-secondary btn-sm" onclick="openUserPwdModal(' + JSON.stringify(u.username) + ')">Password</button>' +
+                    '<button class="btn btn-danger btn-sm" onclick="deleteUser(' + JSON.stringify(u.username) + ')">Delete</button>' +
+                    '</div></td>';
+                tbody.appendChild(tr);
+            });
+        }
+
+        function escHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function openAddUserModal() {
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newUserPwd').value = '';
+            document.getElementById('addUserModal').classList.add('open');
+            setTimeout(function () { document.getElementById('newUsername').focus(); }, 50);
+        }
+
+        async function submitAddUser() {
+            var username = document.getElementById('newUsername').value.trim();
+            var password = document.getElementById('newUserPwd').value;
+            if (!username) { toast('Username cannot be empty.', 'error'); return; }
+            if (!password || password.length < 6) { toast('Password must be at least 6 characters.', 'error'); return; }
+            var btn = document.getElementById('addUserSubmitBtn');
+            btn.disabled = true;
+            try {
+                await api('api_create_user', { username: username, password: password });
+                closeModal('addUserModal');
+                toast('User "' + username + '" created.', 'success');
+                await loadUsers();
+            } catch (e) {
+                toast('Failed to create user: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function deleteUser(username) {
+            if (!confirm('Delete user "' + username + '"? This cannot be undone.')) return;
+            try {
+                await api('api_delete_user', { username: username });
+                toast('User "' + username + '" deleted.', 'success');
+                await loadUsers();
+            } catch (e) {
+                toast('Failed to delete user: ' + e.message, 'error');
+            }
+        }
+
+        function openUserPwdModal(username) {
+            _storeAccessTarget = username;
+            document.getElementById('userPwdUsername').textContent = username;
+            document.getElementById('userNewPwd').value = '';
+            document.getElementById('userPwdModal').classList.add('open');
+            setTimeout(function () { document.getElementById('userNewPwd').focus(); }, 50);
+        }
+
+        async function submitUserPassword() {
+            var password = document.getElementById('userNewPwd').value;
+            if (!password || password.length < 6) { toast('Password must be at least 6 characters.', 'error'); return; }
+            var btn = document.getElementById('userPwdSubmitBtn');
+            btn.disabled = true;
+            try {
+                await api('api_set_user_password', { username: _storeAccessTarget, password: password });
+                closeModal('userPwdModal');
+                toast('Password updated for "' + _storeAccessTarget + '".', 'success');
+            } catch (e) {
+                toast('Failed to update password: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function openStoreAccessModal(username) {
+            _storeAccessTarget = username;
+            document.getElementById('storeAccessUsername').textContent = username;
+            // Populate store dropdown
+            try {
+                var storeList = await api('api_list_stores');
+                var sel = document.getElementById('storeAccessSelect');
+                sel.innerHTML = '';
+                (storeList || []).forEach(function (s) {
+                    var opt = document.createElement('option');
+                    opt.value = s.name || s;
+                    opt.textContent = s.name || s;
+                    sel.appendChild(opt);
+                });
+            } catch (e) { /* ignore */ }
+            renderCurrentAccess(username);
+            document.getElementById('storeAccessRead').checked = true;
+            document.getElementById('storeAccessWrite').checked = false;
+            document.getElementById('storeAccessModal').classList.add('open');
+        }
+
+        function renderCurrentAccess(username) {
+            var user = _userList.find(function (u) { return u.username === username; });
+            var container = document.getElementById('storeAccessCurrentList');
+            if (!user || !Object.keys(user.stores).length) {
+                container.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:0">No stores assigned.</p>';
+                return;
+            }
+            var html = '<p style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);margin-bottom:.5rem">Current Access</p><div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">';
+            Object.keys(user.stores).forEach(function (s) {
+                var perm = user.stores[s];
+                var label = perm.write ? s + ' (r+w)' : s + ' (r)';
+                html += '<span class="store-pill' + (perm.write ? ' write' : '') + '">' + escHtml(label) +
+                    ' <button onclick="removeStoreAccess(' + JSON.stringify(username) + ',' + JSON.stringify(s) + ')" style="background:none;border:none;cursor:pointer;color:inherit;font-size:0.75rem;line-height:1;padding:0 0 0 3px">&times;</button></span>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function submitStoreAccess() {
+            var store = document.getElementById('storeAccessSelect').value;
+            var read = document.getElementById('storeAccessRead').checked;
+            var write = document.getElementById('storeAccessWrite').checked;
+            if (!store) { toast('Select a store first.', 'error'); return; }
+            try {
+                await api('api_set_user_store_access', { username: _storeAccessTarget, store: store, read: read, write: write });
+                toast('Access updated.', 'success');
+                await loadUsers();
+                // Refresh current access display inside modal
+                var user = _userList.find(function (u) { return u.username === _storeAccessTarget; });
+                if (user) renderCurrentAccess(_storeAccessTarget);
+            } catch (e) {
+                toast('Failed to update access: ' + e.message, 'error');
+            }
+        }
+
+        async function removeStoreAccess(username, store) {
+            try {
+                await api('api_remove_user_store_access', { username: username, store: store });
+                toast('Access to "' + store + '" removed.', 'success');
+                await loadUsers();
+                renderCurrentAccess(username);
+            } catch (e) {
+                toast('Failed to remove access: ' + e.message, 'error');
+            }
+        }
+
+        // ── CONTROL / SDK USERS ───────────────────────────────────────────────
+
+        var _controlUserTarget = '';
+
+        async function loadControlUsers() {
+            try {
+                var users = await api('api_list_control_users');
+                renderControlUsers(users);
+            } catch (e) {
+                toast('Failed to load control users: ' + e.message, 'error');
+            }
+        }
+
+        var ROLE_BADGE = {
+            viewer: '<span class="store-pill">viewer</span>',
+            operator: '<span class="store-pill write">operator</span>',
+            admin: '<span class="store-pill" style="background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#f87171">admin</span>',
+        };
+
+        function renderControlUsers(users) {
+            var empty = document.getElementById('controlUsersEmpty');
+            var table = document.getElementById('controlUsersTable');
+            var tbody = document.getElementById('controlUsersTableBody');
+            if (!users || users.length === 0) {
+                empty.style.display = '';
+                table.style.display = 'none';
+                return;
+            }
+            empty.style.display = 'none';
+            table.style.display = '';
+            tbody.innerHTML = '';
+            users.forEach(function (u) {
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><strong>' + escHtml(u.username) + '</strong></td>' +
+                    '<td>' + (ROLE_BADGE[u.role] || escHtml(u.role)) + '</td>' +
+                    '<td><div class="table-actions">' +
+                    '<button class="btn btn-secondary btn-sm" onclick="openCtrlRoleModal(' + JSON.stringify(u.username) + ',' + JSON.stringify(u.role) + ')">Role</button>' +
+                    '<button class="btn btn-secondary btn-sm" onclick="openCtrlPwdModal(' + JSON.stringify(u.username) + ')">Password</button>' +
+                    '<button class="btn btn-danger btn-sm" onclick="deleteControlUser(' + JSON.stringify(u.username) + ')">Delete</button>' +
+                    '</div></td>';
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openAddControlUserModal() {
+            document.getElementById('newCtrlUsername').value = '';
+            document.getElementById('newCtrlPwd').value = '';
+            document.getElementById('newCtrlRole').value = 'viewer';
+            document.getElementById('addControlUserModal').classList.add('open');
+            setTimeout(function () { document.getElementById('newCtrlUsername').focus(); }, 50);
+        }
+
+        async function submitAddControlUser() {
+            var username = document.getElementById('newCtrlUsername').value.trim();
+            var password = document.getElementById('newCtrlPwd').value;
+            var role = document.getElementById('newCtrlRole').value;
+            if (!username) { toast('Username cannot be empty.', 'error'); return; }
+            if (!password || password.length < 6) { toast('Password must be at least 6 characters.', 'error'); return; }
+            var btn = document.getElementById('addCtrlUserSubmitBtn');
+            btn.disabled = true;
+            try {
+                await api('api_create_control_user', { username: username, password: password, role: role });
+                closeModal('addControlUserModal');
+                toast('Control user "' + username + '" created.', 'success');
+                await loadControlUsers();
+            } catch (e) {
+                toast('Failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function deleteControlUser(username) {
+            if (!confirm('Delete control user "' + username + '"? They will be immediately logged out.')) return;
+            try {
+                await api('api_delete_control_user', { username: username });
+                toast('Control user "' + username + '" deleted.', 'success');
+                await loadControlUsers();
+            } catch (e) {
+                toast('Failed: ' + e.message, 'error');
+            }
+        }
+
+        function openCtrlPwdModal(username) {
+            _controlUserTarget = username;
+            document.getElementById('ctrlUserPwdName').textContent = username;
+            document.getElementById('ctrlUserNewPwd').value = '';
+            document.getElementById('ctrlUserPwdModal').classList.add('open');
+            setTimeout(function () { document.getElementById('ctrlUserNewPwd').focus(); }, 50);
+        }
+
+        async function submitControlUserPwd() {
+            var password = document.getElementById('ctrlUserNewPwd').value;
+            if (!password || password.length < 6) { toast('Password must be at least 6 characters.', 'error'); return; }
+            var btn = document.getElementById('ctrlUserPwdSubmitBtn');
+            btn.disabled = true;
+            try {
+                await api('api_set_control_user_password', { username: _controlUserTarget, password: password });
+                closeModal('ctrlUserPwdModal');
+                toast('Password updated for "' + _controlUserTarget + '".', 'success');
+            } catch (e) {
+                toast('Failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function openCtrlRoleModal(username, currentRole) {
+            _controlUserTarget = username;
+            // Simple inline prompt for role change
+            var role = prompt('New role for "' + username + '"\\n\\nviewer — read-only\\noperator — manage stores\\nadmin — full access', currentRole);
+            if (!role) return;
+            role = role.trim().toLowerCase();
+            if (!['viewer', 'operator', 'admin'].includes(role)) {
+                toast('Invalid role. Must be viewer, operator, or admin.', 'error');
+                return;
+            }
+            api('api_set_control_user_role', { username: username, role: role })
+                .then(function () {
+                    toast('Role updated to "' + role + '".', 'success');
+                    loadControlUsers();
+                })
+                .catch(function (e) { toast('Failed: ' + e.message, 'error'); });
+        }
+
+        document.querySelectorAll('.modal-overlay').forEach(function (overlay) {
+            overlay.addEventListener('click', function (e) {
+                if (e.target === overlay) overlay.classList.remove('open');
+            });
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.open').forEach(function (m) { m.classList.remove('open'); });
+            }
+        });
+
+        window.addEventListener('load', function () {
+            initAuth();
+            loadSecurity();
+        });
+    </script>
+</body>
+
+</html>

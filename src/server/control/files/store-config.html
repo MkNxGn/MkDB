@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MkDB &mdash; Store Config</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --sidebar: #080e1c;
+            --panel: #1e293b;
+            --border: #334155;
+            --border-mid: #475569;
+            --blue: #3b82f6;
+            --blue-dim: rgba(59, 130, 246, 0.12);
+            --blue-light: #60a5fa;
+            --text: #e2e8f0;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 1.25rem 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand-icon {
+            width: 22px;
+            height: 22px;
+            color: var(--blue-light);
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand span {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: 0.02em;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 0.75rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.6rem 1.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link svg {
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+        }
+
+        .nav-link:hover {
+            background: var(--blue-dim);
+            color: var(--text);
+            border-left-color: var(--border-mid);
+        }
+
+        .nav-link.active {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border-left-color: var(--blue);
+        }
+
+        .sidebar-footer {
+            padding: 0.75rem 1.25rem 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.15s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            padding: 1rem 1.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: var(--bg);
+            gap: 1rem;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+
+        .topbar-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-heading);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .topbar-breadcrumb {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-heading);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .breadcrumb-sep {
+            color: var(--text-dim);
+            margin: 0 0.1rem;
+        }
+
+        .breadcrumb-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .breadcrumb-link:hover {
+            color: var(--text);
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.75rem;
+        }
+
+        /* BUTTONS */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.55rem 1.1rem;
+            border: none;
+            border-radius: 7px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--border-mid);
+            color: var(--text);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* TABS */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 0.65rem 1.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            margin-bottom: -1px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text);
+        }
+
+        .tab-btn.active {
+            color: var(--blue-light);
+            border-bottom-color: var(--blue);
+        }
+
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+
+        /* STATS TAB */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 0.75rem;
+            text-align: center;
+        }
+
+        .stat-card-warn {
+            border-color: #e67e22;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.55;
+            margin-top: 0.35rem;
+        }
+
+        .bw-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+        }
+
+        .bw-label {
+            font-size: 0.78rem;
+            opacity: 0.6;
+            margin-bottom: 0.3rem;
+        }
+
+        .bw-value {
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        .ram-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.5rem;
+        }
+
+        .ram-bar-track {
+            flex: 1;
+            min-width: 80px;
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .ram-bar-fill {
+            height: 100%;
+            background: var(--blue, #3498db);
+            border-radius: 4px;
+            transition: width 0.4s;
+        }
+
+        .ram-bar-fill.ram-full {
+            background: #e74c3c;
+        }
+
+        .ram-meta {
+            font-size: 0.78rem;
+            opacity: 0.6;
+        }
+
+        .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.84rem;
+        }
+
+        .metrics-table th {
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.55;
+            padding: 0.4rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .metrics-table td {
+            padding: 0.42rem 0.6rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+        }
+
+        .metrics-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .client-user {
+            color: var(--blue-light, #5dade2);
+            font-weight: 500;
+        }
+
+        .client-ip {
+            font-size: 0.82rem;
+            opacity: 0.75;
+            font-family: monospace;
+        }
+
+        .section-sub {
+            font-size: 0.78rem;
+            opacity: 0.6;
+            margin: -0.5rem 0 0.75rem;
+        }
+
+        .stats-footer {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+
+        .stats-footer button {
+            opacity: 1;
+        }
+
+        .btn-danger {
+            background: #c0392b !important;
+            color: #fff !important;
+            border-color: #c0392b !important;
+        }
+
+        .btn-danger:hover {
+            background: #e74c3c !important;
+        }
+
+        /* CARD */
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.75rem 2rem;
+        }
+
+        /* Stack cards in tab panes with consistent spacing */
+        .tab-pane>.card+.card,
+        .tab-pane>.stat-grid+.card,
+        .tab-pane>.card+.stat-grid {
+            margin-top: 1.25rem;
+        }
+
+        /* FORMS */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            margin-bottom: 1.35rem;
+        }
+
+        .form-row {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .form-row-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input,
+        select,
+        textarea {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-mid);
+            border-radius: 7px;
+            color: var(--text);
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-family: inherit;
+            width: 100%;
+            transition: border-color 0.15s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+
+        input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        select option {
+            background: var(--panel);
+        }
+
+        .hint {
+            font-size: 0.73rem;
+            color: var(--text-dim);
+        }
+
+        /* TOGGLE */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.9rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .toggle-row:last-of-type {
+            border-bottom: none;
+        }
+
+        .toggle-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .toggle-info strong {
+            font-size: 0.875rem;
+            color: var(--text);
+        }
+
+        .toggle-info span {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .switch-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--border-mid);
+            border-radius: 24px;
+            transition: 0.2s;
+            cursor: pointer;
+        }
+
+        .switch-slider::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+        .switch input:checked+.switch-slider {
+            background: var(--blue);
+        }
+
+        .switch input:checked+.switch-slider::before {
+            transform: translateX(20px);
+        }
+
+        /* COMBO BOX */
+        .combo-box {
+            background: rgba(59, 130, 246, 0.06);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 8px;
+            padding: 0.875rem 1rem;
+            margin-top: 0.25rem;
+        }
+
+        .combo-box-label {
+            font-size: 0.73rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--blue-light);
+            margin-bottom: 0.3rem;
+        }
+
+        .combo-box-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .combo-box-sub {
+            font-size: 0.73rem;
+            color: var(--text-dim);
+            margin-top: 0.2rem;
+        }
+
+        /* ENTITY HEALTH ALERT */
+        .entity-health-alert {
+            display: none;
+            border-radius: 7px;
+            padding: 0.6rem 0.875rem;
+            font-size: 0.83rem;
+            line-height: 1.5;
+            margin-top: 0.75rem;
+        }
+
+        .entity-health-alert.health-low {
+            display: block;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            color: #fbbf24;
+        }
+
+        .entity-health-alert.health-degraded {
+            display: block;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+
+        /* SECTION HEADING */
+        .section-heading {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-dim);
+            margin-bottom: 1.1rem;
+            margin-top: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-heading::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .divider {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 1.5rem 0;
+        }
+
+        /* SPINNER */
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-center {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 4rem 0;
+            color: var(--text-dim);
+            font-size: 0.875rem;
+        }
+
+        /* TOAST */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text);
+            max-width: 320px;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.25s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--green);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--red);
+        }
+
+        .toast-info {
+            border-left: 3px solid var(--blue);
+        }
+
+        .save-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span>MkDB</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/home" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/stores" class="nav-link active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span>Stores</span>
+                </a>
+                <a href="/config" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                <a href="/security" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Security</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-row">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Running</span>
+                </div>
+                <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Sign out</button>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <div class="topbar-breadcrumb">
+                        <a href="/stores" class="breadcrumb-link">Stores</a>
+                        <span class="breadcrumb-sep"> / </span>
+                        <span id="breadcrumbName" style="color:var(--text-heading)">...</span>
+                    </div>
+                </div>
+                <a href="/stores" class="btn btn-ghost">&#8592; Back to Stores</a>
+            </div>
+            <div class="content">
+                <div id="loadingCenter" class="loading-center">
+                    <div class="spinner"></div><span>Loading configuration...</span>
+                </div>
+
+                <div id="configContent" style="display:none">
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="stats" onclick="switchTab('stats')">Stats</button>
+                        <button class="tab-btn" data-tab="basic" onclick="switchTab('basic')">Basic</button>
+                        <button class="tab-btn" data-tab="file" onclick="switchTab('file')">File</button>
+                        <button class="tab-btn" data-tab="entity" onclick="switchTab('entity')">Entity</button>
+                        <button class="tab-btn" data-tab="ram" onclick="switchTab('ram')">RAM</button>
+                        <button class="tab-btn" data-tab="schema" onclick="switchTab('schema')">Schema</button>
+                    </div>
+
+                    <!-- BASIC TAB -->
+                    <div id="tab-basic" class="tab-pane active">
+                        <div class="card">
+                            <div class="form-group">
+                                <label for="basicName">Store Name</label>
+                                <input type="text" id="basicName" disabled>
+                            </div>
+                            <div class="form-group">
+                                <label for="basicDesc">Description</label>
+                                <textarea id="basicDesc" rows="3" placeholder="Brief description of this store"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="basicClientIdHeader">HTTP Client Identifier Header</label>
+                                <input type="text" id="basicClientIdHeader" placeholder="e.g. X-Forwarded-For, X-Real-IP">
+                                <span class="hint">When set, this HTTP request header is used to identify clients in metrics. Leave empty to use the remote IP address.</span>
+                            </div>
+                            <div class="toggle-row" style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
+                                <div class="toggle-info">
+                                    <strong>Protect Read Requests</strong>
+                                    <span>When enabled, GET / query / read operations also require authentication (not just writes)</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="basicProtectReads">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="save-row">
+                                <button class="btn btn-primary" onclick="saveBasic()">Save</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FILE TAB -->
+                    <div id="tab-file" class="tab-pane">
+                        <div class="card">
+                            <div class="form-row form-row-2">
+                                <div class="form-group">
+                                    <label for="fileSizeTrigger">File Size Split Trigger (bytes)</label>
+                                    <input type="number" id="fileSizeTrigger" min="1" placeholder="20971520">
+                                    <span class="hint">Default: 20971520 (20 MB)</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="fileType">File Type</label>
+                                    <select id="fileType">
+                                        <option value="rolling_log">Rolling Log</option>
+                                        <option value="fixed_log">Fixed Log</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="save-row">
+                                <button class="btn btn-primary" onclick="saveFile()">Save</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ENTITY TAB -->
+                    <div id="tab-entity" class="tab-pane">
+                        <div class="card">
+                            <div class="form-row form-row-2">
+                                <div class="form-group">
+                                    <label for="tokenChars">Token Characters</label>
+                                    <input type="text" id="tokenChars" placeholder="abcdefghijklmnopqrstuvwxyz0123456789" oninput="updateCombinations()">
+                                    <span class="hint">Characters used to generate entity tokens.</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="tokenLen">Token Length</label>
+                                    <input type="number" id="tokenLen" min="1" max="64" placeholder="8" oninput="updateCombinations()">
+                                </div>
+                            </div>
+                            <div class="combo-box" id="comboBox">
+                                <div class="combo-box-label">Token Combinations</div>
+                                <div class="combo-box-value" id="comboValue">&mdash;</div>
+                                <div class="combo-box-sub" id="comboSub">Enter character set and length to compute</div>
+                            </div>
+                            <div id="entityHealthAlert" class="entity-health-alert"></div>
+                            <hr class="divider">
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Auto Expand</strong>
+                                    <span>Automatically expand token space when combinations are exhausted</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="entityAutoExpand" onchange="updateEntityHealth()">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <hr class="divider">
+                            <div class="section-heading">Rate Limiting</div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Enable Rate Limit</strong>
+                                    <span>Limit requests per second from a single IP to this store</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="rateLimitEnabled">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group" style="margin-top:0.85rem">
+                                <label for="rateLimitRps">Max Requests / Second (per IP)</label>
+                                <input type="number" id="rateLimitRps" min="1" placeholder="100">
+                            </div>
+                            <hr class="divider">
+                            <div class="section-heading">Query Monitoring</div>
+                            <div class="form-group">
+                                <label for="slowQueryThreshold">Slow Query Threshold (ms)</label>
+                                <input type="number" id="slowQueryThreshold" min="0" step="1" placeholder="0 = disabled">
+                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Queries exceeding this duration are logged and flagged as warnings. Set 0 to disable.</span>
+                            </div>
+                            <div class="save-row">
+                                <button class="btn btn-primary" onclick="saveEntity()">Save</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RAM TAB -->
+                    <div id="tab-ram" class="tab-pane">
+                        <div class="card">
+                            <div class="section-heading">Cache Settings</div>
+                            <div class="form-row form-row-2">
+                                <div class="form-group">
+                                    <label for="ramMaxSize">Max Size (entries)</label>
+                                    <input type="number" id="ramMaxSize" min="0" placeholder="0 = unlimited">
+                                </div>
+                                <div class="form-group">
+                                    <label for="ramTtl">TTL (seconds)</label>
+                                    <input type="number" id="ramTtl" min="0" placeholder="0 = no expiry">
+                                </div>
+                            </div>
+                            <div class="form-row form-row-2">
+                                <div class="form-group">
+                                    <label for="ramCleanInterval">Cleanup Interval (seconds)</label>
+                                    <input type="number" id="ramCleanInterval" min="1" placeholder="60">
+                                </div>
+                                <div class="form-group">
+                                    <label for="ramCleanType">Eviction Policy</label>
+                                    <select id="ramCleanType">
+                                        <option value="lru">LRU &mdash; Least Recently Used</option>
+                                        <option value="lfu">LFU &mdash; Least Frequently Used</option>
+                                        <option value="fifo">FIFO &mdash; First In, First Out</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <hr class="divider">
+                            <div class="section-heading">Behaviour</div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Update On Access</strong>
+                                    <span>Reset TTL when a cached entry is read</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="ramUpdateOnAccess">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <hr class="divider">
+                            <div class="section-heading">Index Caching</div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Keep Index in RAM</strong>
+                                    <span>Cache the store index in memory for faster lookups</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="ramKeepIndex">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group" style="margin-top:0.75rem">
+                                <label for="ramIndexCacheTtl">Index Cache TTL (seconds)</label>
+                                <input type="number" id="ramIndexCacheTtl" min="0" placeholder="0 = no expiry">
+                            </div>
+                            <hr class="divider">
+                            <div class="section-heading">Query Field Caching</div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Keep Query Fields in RAM</strong>
+                                    <span>Cache query field data in memory to speed up repeated queries</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="ramKeepQueryFields">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group" style="margin-top:0.75rem">
+                                <label for="ramQueryFieldsCacheTtl">Query Fields Cache TTL (seconds)</label>
+                                <input type="number" id="ramQueryFieldsCacheTtl" min="0" placeholder="0 = no expiry">
+                            </div>
+                            <div class="save-row">
+                                <button class="btn btn-primary" onclick="saveRam()">Save</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STATS TAB -->
+                    <div id="tab-stats" class="tab-pane">
+
+                        <!-- Summary row -->
+                        <div class="stat-grid">
+                            <div class="stat-card">
+                                <div class="stat-value" id="st-reads">—</div>
+                                <div class="stat-label">Reads</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="st-writes">—</div>
+                                <div class="stat-label">Writes</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="st-deletes">—</div>
+                                <div class="stat-label">Deletes</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="st-queries">—</div>
+                                <div class="stat-label">Queries</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="st-slow-queries" style="color:var(--yellow)">—</div>
+                                <div class="stat-label">Slow Queries</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="st-errors">—</div>
+                                <div class="stat-label">Errors</div>
+                            </div>
+                            <div class="stat-card stat-card-warn">
+                                <div class="stat-value" id="st-ratelimited">—</div>
+                                <div class="stat-label">Rate Limited</div>
+                            </div>
+                        </div>
+
+                        <!-- Bandwidth -->
+                        <div class="card">
+                            <div class="section-heading">Bandwidth</div>
+                            <div class="bw-grid">
+                                <div>
+                                    <div class="bw-label">&uarr; Bytes In &nbsp;<small>(write traffic)</small></div>
+                                    <div class="bw-value" id="st-bytes-in">—</div>
+                                </div>
+                                <div>
+                                    <div class="bw-label">&darr; Bytes Out &nbsp;<small>(read / query traffic)</small></div>
+                                    <div class="bw-value" id="st-bytes-out">—</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RAM Cache -->
+                        <div class="card">
+                            <div class="section-heading">RAM Cache</div>
+                            <div class="ram-bar-row">
+                                <span id="st-ram-label">— / — entries</span>
+                                <div class="ram-bar-track">
+                                    <div class="ram-bar-fill" id="st-ram-fill" style="width:0%"></div>
+                                </div>
+                            </div>
+                            <div class="ram-meta" id="st-ram-meta">—</div>
+                        </div>
+
+                        <!-- Transport breakdown -->
+                        <div class="card">
+                            <div class="section-heading">By Transport</div>
+                            <table class="metrics-table">
+                                <thead>
+                                    <tr>
+                                        <th>Transport</th>
+                                        <th>Reads</th>
+                                        <th>Writes</th>
+                                        <th>Deletes</th>
+                                        <th>Queries</th>
+                                        <th>Errors</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="st-transport-body">
+                                    <tr>
+                                        <td colspan="6" class="empty-state">No data</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Slow Query Log -->
+                        <div class="card">
+                            <div class="section-heading">Slow Query Log <span id="st-slow-threshold" style="font-size:0.8rem;font-weight:400;color:var(--text-dim)"></span></div>
+                            <table class="metrics-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Duration (ms)</th>
+                                        <th>Results</th>
+                                        <th>Transport</th>
+                                        <th>Client</th>
+                                        <th>Filter</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="st-slow-body">
+                                    <tr>
+                                        <td colspan="6" class="empty-state">No slow queries</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Per-client breakdown -->
+                        <div class="card">
+                            <div class="section-heading">Per-Client Activity</div>
+                            <p class="section-sub">Authenticated users shown by username &middot; unauthenticated shown by IP address</p>
+                            <table class="metrics-table">
+                                <thead>
+                                    <tr>
+                                        <th>Client</th>
+                                        <th>Reads</th>
+                                        <th>Writes</th>
+                                        <th>Deletes</th>
+                                        <th>Queries</th>
+                                        <th>In</th>
+                                        <th>Out</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="st-clients-body">
+                                    <tr>
+                                        <td colspan="7" class="empty-state">No activity yet</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Rate-limited IPs -->
+                        <div class="card">
+                            <div class="section-heading">Rate-Limited IPs</div>
+                            <table class="metrics-table">
+                                <thead>
+                                    <tr>
+                                        <th>IP Address</th>
+                                        <th>Block Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="st-ratelimit-body">
+                                    <tr>
+                                        <td colspan="2" class="empty-state">No rate-limit events</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Recent Errors -->
+                        <div class="card">
+                            <div class="section-heading">Recent Errors</div>
+                            <table class="metrics-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Message</th>
+                                        <th>Source</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="st-errors-body">
+                                    <tr>
+                                        <td colspan="3" class="empty-state">No errors recorded</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="stats-footer">
+                            <span id="st-uptime"></span>
+                            <button class="btn btn-sm" onclick="loadStats()">&#8635; Refresh</button>
+                            <button class="btn btn-sm btn-danger" onclick="resetStats()">Reset Metrics</button>
+                        </div>
+                    </div>
+
+                    <!-- SCHEMA TAB -->
+                    <div id="tab-schema" class="tab-pane">
+                        <div class="card">
+                            <div class="section-heading">Fields &amp; Indexes</div>
+                            <p class="section-sub">Define which fields can be queried and how they are indexed. Changes take effect after saving — run <em>Rebuild Index</em> if the store already has data.</p>
+                            <table class="metrics-table" id="schema-table">
+                                <thead>
+                                    <tr>
+                                        <th>Field Name</th>
+                                        <th>Queryable</th>
+                                        <th>Indexed</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="schema-body">
+                                    <tr>
+                                        <td colspan="4" class="empty-state">No fields defined</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center">
+                                <input type="text" id="newFieldName" placeholder="field_name" style="max-width:200px">
+                                <button class="btn" onclick="schemaAddField()">+ Add Field</button>
+                            </div>
+                        </div>
+                        <div style="margin-top:1rem">
+                            <button class="btn btn-primary" onclick="schemaSave()">Save Schema</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script>
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function api(action, data) {
+            data = data || {};
+            const res = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ action }, data))
+            });
+            if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthenticated'); }
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message || 'Server error');
+            return json.result;
+        }
+
+        function toast(msg, type, dur) {
+            type = type || 'info'; dur = dur || 3500;
+            const el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = msg;
+            document.getElementById('toastContainer').appendChild(el);
+            requestAnimationFrame(function () { el.classList.add('show'); });
+            setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 300); }, dur);
+        }
+
+        async function initAuth() {
+            try {
+                const res = await fetch('/auth/status');
+                const d = await res.json();
+                if (d.enabled) document.getElementById('logoutBtn').style.display = '';
+            } catch (e) { }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            document.cookie = 'mkdb_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            window.location.href = '/login';
+        }
+
+        var storeName = '';
+        var storeConfig = {};
+
+        function getParam(key) {
+            return new URLSearchParams(window.location.search).get(key) || '';
+        }
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-tab') === name);
+            });
+            document.querySelectorAll('.tab-pane').forEach(function (p) {
+                p.classList.toggle('active', p.id === 'tab-' + name);
+            });
+            if (name === 'stats') {
+                loadStats();
+                startStatsRefresh();
+            } else {
+                stopStatsRefresh();
+            }
+        }
+
+        function num(v, fallback) {
+            var n = parseInt(v, 10);
+            return isNaN(n) ? (fallback || 0) : n;
+        }
+
+        function populateForm(config) {
+            // Basic
+            document.getElementById('basicName').value = storeName;
+            document.getElementById('basicDesc').value = config.description || config.desc || '';
+            document.getElementById('basicProtectReads').checked = !!(config.protect_reads);
+            document.getElementById('basicClientIdHeader').value = config.client_id_header || '';
+
+            // File
+            var fc = config.file_config || {};
+            document.getElementById('fileSizeTrigger').value = fc.size_split_trigger !== undefined ? fc.size_split_trigger : '';
+            document.getElementById('fileType').value = fc.file_type || 'rolling_log';
+
+            // Entity
+            var ec = config.entity_config || {};
+            document.getElementById('tokenChars').value = ec.token_chars || ec.token_characters || '';
+            document.getElementById('tokenLen').value = ec.token_length !== undefined ? ec.token_length : '';
+            document.getElementById('entityAutoExpand').checked = !!(ec.auto_expand);
+            document.getElementById('slowQueryThreshold').value = config.slow_query_threshold_ms !== undefined ? config.slow_query_threshold_ms : 0;
+            var rl = config.rate_limit || {};
+            document.getElementById('rateLimitEnabled').checked = !!(rl.enabled);
+            document.getElementById('rateLimitRps').value = rl.max_requests_per_second !== undefined ? rl.max_requests_per_second : 100;
+            updateCombinations();
+
+            // RAM
+            var rc = config.ram_config || {};
+            document.getElementById('ramMaxSize').value = rc.max_size !== undefined ? rc.max_size : '';
+            document.getElementById('ramTtl').value = rc.ttl !== undefined ? rc.ttl : '';
+            document.getElementById('ramCleanInterval').value = rc.cleanup_interval !== undefined ? rc.cleanup_interval : '';
+            document.getElementById('ramCleanType').value = rc.clean_type || 'lru';
+            document.getElementById('ramUpdateOnAccess').checked = !!(rc.update_on_access);
+            document.getElementById('ramKeepIndex').checked = !!(rc.keep_index_in_ram);
+            document.getElementById('ramIndexCacheTtl').value = rc.index_cache_ttl !== undefined ? rc.index_cache_ttl : '';
+            document.getElementById('ramKeepQueryFields').checked = !!(rc.keep_query_fields_in_ram);
+            document.getElementById('ramQueryFieldsCacheTtl').value = rc.query_fields_cache_ttl !== undefined ? rc.query_fields_cache_ttl : '';
+
+            // Schema
+            populateSchema((config.schema_config || {}).fields || {});
+        }
+
+        function updateCombinations() {
+            var chars = document.getElementById('tokenChars').value;
+            var lenVal = document.getElementById('tokenLen').value;
+            var len = parseInt(lenVal, 10);
+            var uniqueChars = chars ? new Set(chars.split('')).size : 0;
+
+            if (!uniqueChars || !len || len < 1) {
+                document.getElementById('comboValue').textContent = '\u2014';
+                document.getElementById('comboSub').textContent = 'Enter character set and length to compute';
+                updateEntityHealth();
+                return;
+            }
+
+            // Compute charSetSize^tokenLength — use BigInt to handle large numbers
+            try {
+                var result = BigInt(uniqueChars) ** BigInt(len);
+                var str = result.toString();
+                // Format with commas for readability
+                var formatted = str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                document.getElementById('comboValue').textContent = formatted;
+                document.getElementById('comboSub').textContent = uniqueChars + ' chars ^ ' + len + ' length';
+            } catch (e) {
+                document.getElementById('comboValue').textContent = 'Too large';
+                document.getElementById('comboSub').textContent = uniqueChars + ' chars ^ ' + len + ' length';
+            }
+            updateEntityHealth();
+        }
+
+        function updateEntityHealth() {
+            var len = parseInt(document.getElementById('tokenLen').value, 10);
+            var autoExpand = document.getElementById('entityAutoExpand').checked;
+            var el = document.getElementById('entityHealthAlert');
+            if (!el) return;
+            el.className = 'entity-health-alert';
+            if (!isNaN(len) && len > 32) {
+                el.className = 'entity-health-alert health-degraded';
+                el.textContent = '\u26a0 Token length ' + len + ' exceeds the recommended maximum of 32 characters. Performance may degrade \u2014 consider reducing it.';
+            } else if (!isNaN(len) && autoExpand && len >= 28) {
+                el.className = 'entity-health-alert health-low';
+                el.textContent = '\u26a0 Token length ' + len + ' is approaching the 32-character performance limit. With auto expand enabled this may increase further \u2014 database health is low.';
+            }
+        }
+
+        async function saveBasic() {
+            var desc = document.getElementById('basicDesc').value.trim();
+            var protectReads = document.getElementById('basicProtectReads').checked;
+            var clientIdHeader = document.getElementById('basicClientIdHeader').value.trim();
+            try {
+                await api('api_update_store', { name: storeName, description: desc });
+                await api('api_update_store_config', { name: storeName, protect_reads: protectReads, client_id_header: clientIdHeader });
+                toast('Basic settings saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveFile() {
+            var sizeTrigger = document.getElementById('fileSizeTrigger').value;
+            var fileType = document.getElementById('fileType').value;
+            var file_config = {
+                file_type: fileType
+            };
+            if (sizeTrigger !== '') file_config.size_split_trigger = parseInt(sizeTrigger, 10);
+            try {
+                await api('api_update_store_config', { name: storeName, file_config: file_config });
+                toast('File settings saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveEntity() {
+            var tokenChars = document.getElementById('tokenChars').value;
+            var tokenLen = document.getElementById('tokenLen').value;
+            var autoExpand = document.getElementById('entityAutoExpand').checked;
+            var rlEnabled = document.getElementById('rateLimitEnabled').checked;
+            var rlRps = parseInt(document.getElementById('rateLimitRps').value, 10) || 100;
+            var entity_config = { auto_expand: autoExpand };
+            if (tokenChars) entity_config.token_chars = tokenChars;
+            if (tokenLen !== '') entity_config.token_length = parseInt(tokenLen, 10);
+            var rate_limit = { enabled: rlEnabled, max_requests_per_second: rlRps };
+            var slowThreshold = parseFloat(document.getElementById('slowQueryThreshold').value) || 0;
+            try {
+                await api('api_update_store_config', { name: storeName, entity_config: entity_config, rate_limit: rate_limit, slow_query_threshold_ms: slowThreshold });
+                toast('Entity settings saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveRam() {
+            var maxSize = document.getElementById('ramMaxSize').value;
+            var ttl = document.getElementById('ramTtl').value;
+            var cleanInterval = document.getElementById('ramCleanInterval').value;
+            var cleanType = document.getElementById('ramCleanType').value;
+            var updateOnAccess = document.getElementById('ramUpdateOnAccess').checked;
+            var keepIndex = document.getElementById('ramKeepIndex').checked;
+            var indexCacheTtl = document.getElementById('ramIndexCacheTtl').value;
+            var keepQueryFields = document.getElementById('ramKeepQueryFields').checked;
+            var queryFieldsCacheTtl = document.getElementById('ramQueryFieldsCacheTtl').value;
+
+            var ram_config = {
+                clean_type: cleanType,
+                update_on_access: updateOnAccess,
+                keep_index_in_ram: keepIndex,
+                keep_query_fields_in_ram: keepQueryFields
+            };
+            if (maxSize !== '') ram_config.max_size = parseInt(maxSize, 10);
+            if (ttl !== '') ram_config.ttl = parseInt(ttl, 10);
+            if (cleanInterval !== '') ram_config.cleanup_interval = parseInt(cleanInterval, 10);
+            if (indexCacheTtl !== '') ram_config.index_cache_ttl = parseInt(indexCacheTtl, 10);
+            if (queryFieldsCacheTtl !== '') ram_config.query_fields_cache_ttl = parseInt(queryFieldsCacheTtl, 10);
+
+            try {
+                await api('api_update_store_config', { name: storeName, ram_config: ram_config });
+                toast('RAM settings saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        // ── Stats tab ──────────────────────────────────────────────────────────
+        var _statsTimer = null;
+
+        function startStatsRefresh() {
+            stopStatsRefresh();
+            _statsTimer = setInterval(loadStats, 5000);
+        }
+
+        function stopStatsRefresh() {
+            if (_statsTimer) { clearInterval(_statsTimer); _statsTimer = null; }
+        }
+
+        function fmtNum(n) {
+            if (n === undefined || n === null) return '0';
+            return Number(n).toLocaleString();
+        }
+
+        function fmtBytes(n) {
+            n = Number(n) || 0;
+            if (n < 1024) return n + ' B';
+            if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+            if (n < 1073741824) return (n / 1048576).toFixed(2) + ' MB';
+            return (n / 1073741824).toFixed(2) + ' GB';
+        }
+
+        function isIpAddress(s) {
+            return /^(\d{1,3}\.){3}\d{1,3}$/.test(s) || /^[\da-f:]+$/i.test(s);
+        }
+
+        function fmtUptime(startedAt) {
+            var secs = Math.floor(Date.now() / 1000 - startedAt);
+            if (secs < 60) return 'Tracking for ' + secs + 's';
+            if (secs < 3600) return 'Tracking for ' + Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+            var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+            return 'Tracking for ' + h + 'h ' + m + 'm';
+        }
+
+        async function loadStats() {
+            if (!storeName) return;
+            try {
+                var m = await api('api_get_store_metrics', { name: storeName });
+                renderStats(m);
+            } catch (e) {
+                // Silently ignore refresh errors to avoid toast spam
+            }
+        }
+
+        function renderStats(m) {
+            // Summary cards
+            document.getElementById('st-reads').textContent = fmtNum(m.reads);
+            document.getElementById('st-writes').textContent = fmtNum(m.writes);
+            document.getElementById('st-deletes').textContent = fmtNum(m.deletes);
+            document.getElementById('st-queries').textContent = fmtNum(m.queries);
+            document.getElementById('st-slow-queries').textContent = fmtNum(m.slow_queries || 0);
+            document.getElementById('st-errors').textContent = fmtNum(m.errors);
+            document.getElementById('st-ratelimited').textContent = fmtNum(m.rate_limited);
+
+            // Bandwidth
+            document.getElementById('st-bytes-in').textContent = fmtBytes(m.bytes_in);
+            document.getElementById('st-bytes-out').textContent = fmtBytes(m.bytes_out);
+
+            // RAM Cache
+            var rc = m.ram_cache || {};
+            var entries = Number(rc.entries || 0);
+            var maxSize = Number(rc.max_size || 0);
+            var pct = maxSize > 0 ? Math.min(100, (entries / maxSize) * 100) : 0;
+            document.getElementById('st-ram-label').textContent =
+                fmtNum(entries) + ' / ' + (maxSize > 0 ? fmtNum(maxSize) : '\u221e') + ' entries';
+            var fill = document.getElementById('st-ram-fill');
+            fill.style.width = pct.toFixed(1) + '%';
+            fill.classList.toggle('ram-full', pct >= 95);
+            var metaParts = [];
+            if (rc.estimated_bytes) metaParts.push('~' + fmtBytes(rc.estimated_bytes) + ' estimated');
+            if (rc.ttl !== undefined) metaParts.push('TTL: ' + (rc.ttl ? rc.ttl + 's' : 'off'));
+            if (rc.clean_type) metaParts.push('Eviction: ' + rc.clean_type.toUpperCase());
+            document.getElementById('st-ram-meta').textContent = metaParts.join('  \u00b7  ') || '\u2014';
+
+            // Transport breakdown
+            var tbody = document.getElementById('st-transport-body');
+            var tr = m.transport || {};
+            var tRows = ['http', 'socket'].map(function (t) {
+                var d = tr[t] || {};
+                if (!d.reads && !d.writes && !d.deletes && !d.queries && !d.errors) return '';
+                return '<tr><td style="font-weight:500">' + t.toUpperCase() + '</td>' +
+                    '<td>' + fmtNum(d.reads) + '</td>' +
+                    '<td>' + fmtNum(d.writes) + '</td>' +
+                    '<td>' + fmtNum(d.deletes) + '</td>' +
+                    '<td>' + fmtNum(d.queries) + '</td>' +
+                    '<td>' + fmtNum(d.errors) + '</td></tr>';
+            }).filter(Boolean).join('');
+            tbody.innerHTML = tRows || '<tr><td colspan="6" class="empty-state">No data</td></tr>';
+
+            // Per-client
+            var cbody = document.getElementById('st-clients-body');
+            var clients = m.clients || [];
+            if (clients.length === 0) {
+                cbody.innerHTML = '<tr><td colspan="7" class="empty-state">No activity yet</td></tr>';
+            } else {
+                cbody.innerHTML = clients.map(function (c) {
+                    var key = escapeHtml(c.key);
+                    var isIp = isIpAddress(c.key);
+                    var label = isIp
+                        ? '<span class="client-ip">' + key + '</span>'
+                        : '<span class="client-user">&#128100; ' + key + '</span>';
+                    return '<tr>' +
+                        '<td>' + label + '</td>' +
+                        '<td>' + fmtNum(c.reads) + '</td>' +
+                        '<td>' + fmtNum(c.writes) + '</td>' +
+                        '<td>' + fmtNum(c.deletes) + '</td>' +
+                        '<td>' + fmtNum(c.queries) + '</td>' +
+                        '<td>' + fmtBytes(c.bytes_in) + '</td>' +
+                        '<td>' + fmtBytes(c.bytes_out) + '</td></tr>';
+                }).join('');
+            }
+
+            // Slow query log
+            var slowBody = document.getElementById('st-slow-body');
+            var slowLog = m.slow_query_log || [];
+            var thresholdMs = m.slow_query_threshold_ms || 0;
+            var threshEl = document.getElementById('st-slow-threshold');
+            if (threshEl) threshEl.textContent = thresholdMs > 0 ? '\u2014 threshold: ' + thresholdMs + ' ms' : '\u2014 disabled';
+            if (slowLog.length === 0) {
+                slowBody.innerHTML = '<tr><td colspan="6" class="empty-state">No slow queries recorded</td></tr>';
+            } else {
+                slowBody.innerHTML = slowLog.map(function (q) {
+                    var t = new Date(q.ts * 1000);
+                    var ts = t.toLocaleTimeString() + ' ' + t.toLocaleDateString();
+                    var filterStr = escapeHtml(JSON.stringify(q.filter || {}));
+                    return '<tr>' +
+                        '<td style="white-space:nowrap">' + ts + '</td>' +
+                        '<td style="color:var(--yellow);font-weight:600">' + q.duration_ms.toFixed(1) + '</td>' +
+                        '<td>' + fmtNum(q.result_count) + '</td>' +
+                        '<td>' + escapeHtml(q.transport || '') + '</td>' +
+                        '<td>' + escapeHtml(q.client || '') + '</td>' +
+                        '<td style="font-family:monospace;font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis" title="' + filterStr + '">' + filterStr + '</td>' +
+                        '</tr>';
+                }).join('');
+            }
+
+            // Rate-limited IPs
+            var rlBody = document.getElementById('st-ratelimit-body');
+            var rlIps = m.rate_limited_ips || [];
+            if (rlIps.length === 0) {
+                rlBody.innerHTML = '<tr><td colspan="2" class="empty-state">No rate-limit events</td></tr>';
+            } else {
+                rlBody.innerHTML = rlIps.map(function (r) {
+                    return '<tr><td class="client-ip">' + escapeHtml(r.ip) +
+                        '</td><td>' + fmtNum(r.count) + '</td></tr>';
+                }).join('');
+            }
+
+            // Recent errors from event log
+            api('api_get_event_log', { level: 'error', limit: 20 }).then(function (ev) {
+                var errBody = document.getElementById('st-errors-body');
+                var errs = (ev.events || []).filter(function (e) {
+                    return !storeName || !e.source || e.source.indexOf(storeName) !== -1 || e.message.indexOf(storeName) !== -1;
+                });
+                if (errs.length === 0) {
+                    errBody.innerHTML = '<tr><td colspan="3" class="empty-state">No errors recorded</td></tr>';
+                } else {
+                    errBody.innerHTML = errs.map(function (e) {
+                        var t = new Date(e.ts * 1000);
+                        var ts = t.toLocaleTimeString() + ' ' + t.toLocaleDateString();
+                        return '<tr>' +
+                            '<td style="white-space:nowrap">' + ts + '</td>' +
+                            '<td style="color:var(--red)">' + escapeHtml(e.message) + '</td>' +
+                            '<td style="color:var(--text-muted);font-size:0.8rem">' + escapeHtml(e.source || '') + '</td>' +
+                            '</tr>';
+                    }).join('');
+                }
+            }).catch(function () { });
+
+            // Uptime label
+            if (m.started_at) {
+                document.getElementById('st-uptime').textContent = fmtUptime(m.started_at);
+            }
+        }
+
+        async function resetStats() {
+            if (!confirm('Reset all metrics for "' + storeName + '"? This cannot be undone.')) return;
+            try {
+                await api('api_reset_store_metrics', { name: storeName });
+                await loadStats();
+                toast('Metrics reset.', 'success');
+            } catch (e) {
+                toast('Reset failed: ' + e.message, 'error');
+            }
+        }
+
+        // ── Schema tab ────────────────────────────────────────────────────────
+        var _schemaFields = {};  // {name: {name, queryable, indexed}}
+
+        function populateSchema(fields) {
+            _schemaFields = {};
+            Object.keys(fields).forEach(function (k) {
+                var f = fields[k];
+                _schemaFields[k] = { name: k, queryable: f.queryable || false, indexed: !!(f.indexed) };
+            });
+            renderSchemaTable();
+        }
+
+        function renderSchemaTable() {
+            var tbody = document.getElementById('schema-body');
+            var names = Object.keys(_schemaFields);
+            if (names.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No fields defined</td></tr>';
+                return;
+            }
+            tbody.innerHTML = names.map(function (k) {
+                var f = _schemaFields[k];
+                var qVal = f.queryable === false ? 'false' : String(f.queryable);
+                return '<tr>' +
+                    '<td style="font-family:monospace">' + escapeHtml(k) + '</td>' +
+                    '<td><select onchange="_schemaFields[' + JSON.stringify(k) + '].queryable = this.value === \'false\' ? false : this.value">' +
+                    '<option value="false"' + (qVal === 'false' ? ' selected' : '') + '>None</option>' +
+                    '<option value="exact"' + (qVal === 'exact' ? ' selected' : '') + '>Exact</option>' +
+                    '<option value="full-text"' + (qVal === 'full-text' ? ' selected' : '') + '>Full-text</option>' +
+                    '<option value="numeric"' + (qVal === 'numeric' ? ' selected' : '') + '>Numeric</option>' +
+                    '</select></td>' +
+                    '<td style="text-align:center"><input type="checkbox"' + (f.indexed ? ' checked' : '') + ' onchange="_schemaFields[' + JSON.stringify(k) + '].indexed = this.checked"></td>' +
+                    '<td><button class="btn btn-sm btn-danger" onclick="schemaRemoveField(' + JSON.stringify(k) + ')">Remove</button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function schemaAddField() {
+            var input = document.getElementById('newFieldName');
+            var name = input.value.trim();
+            if (!name) { toast('Enter a field name.', 'error'); return; }
+            if (!/^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(name)) { toast('Field name must start with a letter or underscore, and contain only letters, numbers, underscores, or dots.', 'error'); return; }
+            if (_schemaFields[name]) { toast('Field "' + name + '" already exists.', 'error'); return; }
+            _schemaFields[name] = { name: name, queryable: false, indexed: false };
+            input.value = '';
+            renderSchemaTable();
+        }
+
+        function schemaRemoveField(name) {
+            delete _schemaFields[name];
+            renderSchemaTable();
+        }
+
+        async function schemaSave() {
+            var fields = {};
+            Object.keys(_schemaFields).forEach(function (k) {
+                fields[k] = { name: k, queryable: _schemaFields[k].queryable, indexed: _schemaFields[k].indexed };
+            });
+            try {
+                await api('api_update_store_config', { name: storeName, schema_config: { fields: fields } });
+                toast('Schema saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function init() {
+            storeName = getParam('store');
+            if (!storeName) {
+                toast('No store specified in URL.', 'error');
+                setTimeout(function () { window.location.href = '/stores'; }, 1500);
+                return;
+            }
+            document.getElementById('breadcrumbName').textContent = storeName;
+            document.title = 'MkDB \u2014 ' + storeName;
+
+            try {
+                storeConfig = await api('api_get_store_config', { name: storeName });
+                populateForm(storeConfig);
+                document.getElementById('loadingCenter').style.display = 'none';
+                document.getElementById('configContent').style.display = '';
+                // Honour ?tab= param; default to stats
+                var initialTab = getParam('tab') || 'stats';
+                switchTab(initialTab);
+            } catch (e) {
+                document.getElementById('loadingCenter').style.display = 'none';
+                toast('Failed to load store config: ' + e.message, 'error');
+            }
+        }
+
+        window.addEventListener('load', function () {
+            initAuth();
+            init();
+        });
+    </script>
+</body>
+
+</html>

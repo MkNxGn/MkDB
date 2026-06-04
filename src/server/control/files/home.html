@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MkDB &mdash; Dashboard</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0f172a;
+            --sidebar: #080e1c;
+            --panel: #1e293b;
+            --border: #334155;
+            --border-mid: #475569;
+            --blue: #3b82f6;
+            --blue-dim: rgba(59, 130, 246, 0.12);
+            --blue-light: #60a5fa;
+            --text: #e2e8f0;
+            --text-heading: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 1.25rem 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand-icon {
+            width: 22px;
+            height: 22px;
+            color: var(--blue-light);
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand span {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: 0.02em;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 0.75rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.6rem 1.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link svg {
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+        }
+
+        .nav-link:hover {
+            background: var(--blue-dim);
+            color: var(--text);
+            border-left-color: var(--border-mid);
+        }
+
+        .nav-link.active {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border-left-color: var(--blue);
+        }
+
+        .sidebar-footer {
+            padding: 0.75rem 1.25rem 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.15s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            padding: 1rem 1.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: var(--bg);
+        }
+
+        .topbar-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .topbar-sub {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 1px;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.75rem;
+        }
+
+        .section-heading {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-heading::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* STATS */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.75rem;
+        }
+
+        .stat-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.45rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            line-height: 1.1;
+        }
+
+        .stat-sub {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            margin-top: 0.35rem;
+        }
+
+        /* BADGES */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .badge-green {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-blue {
+            background: var(--blue-dim);
+            color: var(--blue-light);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .badge-dim {
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+        }
+
+        /* NAV CARDS */
+        .nav-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .nav-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.75rem 1.5rem;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            transition: all 0.15s;
+            color: inherit;
+        }
+
+        .nav-card:hover {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+        }
+
+        .nav-card-icon {
+            width: 44px;
+            height: 44px;
+            background: var(--blue-dim);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            flex-shrink: 0;
+        }
+
+        .nav-card-icon svg {
+            width: 20px;
+            height: 20px;
+            color: var(--blue-light);
+        }
+
+        .nav-card h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .nav-card p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .nav-card-arrow {
+            font-size: 0.78rem;
+            color: var(--blue-light);
+            margin-top: 0.25rem;
+        }
+
+        /* SPINNER */
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+
+        /* TOAST */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text);
+            max-width: 320px;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.25s;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            border-left: 3px solid var(--green);
+        }
+
+        .toast-error {
+            border-left: 3px solid var(--red);
+        }
+
+        /* HEALTH BADGE */
+        .health-ok {
+            color: var(--green);
+        }
+
+        .health-low {
+            color: var(--yellow);
+        }
+
+        .health-degraded {
+            color: var(--red);
+        }
+
+        /* TWO-COL LOWER SECTION */
+        .lower-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+            margin-top: 1.75rem;
+        }
+
+        /* STORE TABLE */
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 0.9rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--text-muted);
+        }
+
+        .panel-refresh {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 0.2rem;
+            border-radius: 4px;
+            transition: color 0.15s;
+            display: flex;
+            align-items: center;
+        }
+
+        .panel-refresh:hover {
+            color: var(--blue-light);
+        }
+
+        .panel-refresh svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        table.store-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        table.store-table th {
+            text-align: left;
+            padding: 0.55rem 1.1rem;
+            color: var(--text-dim);
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        table.store-table td {
+            padding: 0.55rem 1.1rem;
+            color: var(--text);
+            border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+        }
+
+        table.store-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        table.store-table tr:hover td {
+            background: rgba(59, 130, 246, 0.04);
+        }
+
+        .store-ram-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .store-ram-bar {
+            width: 60px;
+            height: 5px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .store-ram-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--blue);
+            transition: width 0.4s;
+        }
+
+        .store-ram-fill.warn {
+            background: var(--yellow);
+        }
+
+        .store-ram-fill.crit {
+            background: var(--red);
+        }
+
+        /* SERVER STATUS ROW */
+        .server-status-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .server-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.55rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .server-badge .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .dot-on {
+            background: var(--green);
+            box-shadow: 0 0 5px var(--green);
+        }
+
+        .dot-off {
+            background: var(--red);
+        }
+
+        .server-label {
+            color: var(--text-muted);
+        }
+
+        /* EVENT LOG */
+        .event-log {
+            padding: 0;
+            max-height: 340px;
+            overflow-y: auto;
+        }
+
+        .event-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.6rem 1.1rem;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+            font-size: 0.78rem;
+        }
+
+        .event-row:last-child {
+            border-bottom: none;
+        }
+
+        .event-ts {
+            color: var(--text-dim);
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-family: monospace;
+            font-size: 0.73rem;
+            padding-top: 1px;
+        }
+
+        .event-pill {
+            flex-shrink: 0;
+            border-radius: 4px;
+            padding: 0.1rem 0.45rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: 1px;
+        }
+
+        .pill-info {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--blue-light);
+        }
+
+        .pill-warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--yellow);
+        }
+
+        .pill-error {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--red);
+        }
+
+        .pill-recovery {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--green);
+        }
+
+        .event-source {
+            color: var(--text-dim);
+            flex-shrink: 0;
+        }
+
+        .event-msg {
+            color: var(--text);
+            flex: 1;
+        }
+
+        .event-empty {
+            padding: 2rem 1.1rem;
+            color: var(--text-dim);
+            font-size: 0.82rem;
+            text-align: center;
+        }
+
+        /* QUICK ACCESS (bottom) */
+        .quick-access {
+            margin-top: 1.75rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span>MkDB</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/home" class="nav-link active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/stores" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span>Stores</span>
+                </a>
+                <a href="/config" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                <a href="/security" class="nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Security</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-row">
+                    <span class="status-dot online"></span>
+                    <span class="status-text">Running</span>
+                </div>
+                <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">Sign out</button>
+            </div>
+        </aside>
+
+        <div class="main">
+            <div class="topbar">
+                <div>
+                    <div class="topbar-title">Dashboard</div>
+                    <div class="topbar-sub">System overview</div>
+                </div>
+            </div>
+            <div class="content">
+                <div id="loadingRow" class="loading-row" style="margin-bottom:1.75rem">
+                    <div class="spinner"></div><span>Loading dashboard&hellip;</span>
+                </div>
+
+                <div id="dashContent" style="display:none">
+
+                    <!-- STAT CARDS -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Database</div>
+                            <div class="stat-value" id="statDbName">&mdash;</div>
+                            <div class="stat-sub" id="statDbPath"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Stores</div>
+                            <div class="stat-value" id="statStoreCount">&mdash;</div>
+                            <div class="stat-sub">Configured stores</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Requests</div>
+                            <div class="stat-value" id="statRequests">&mdash;</div>
+                            <div class="stat-sub" id="statReqSub">reads + writes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Health</div>
+                            <div class="stat-value" id="statHealth" style="font-size:1rem;margin-top:0.35rem">&mdash;</div>
+                            <div class="stat-sub" id="statHealthSub"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Uptime</div>
+                            <div class="stat-value" id="statUptime" style="font-size:1.3rem;margin-top:0.35rem">&mdash;</div>
+                            <div class="stat-sub" id="statUptimeSub">Server running time</div>
+                        </div>
+                    </div>
+
+                    <!-- SERVER STATUS -->
+                    <div class="server-status-row" id="serverStatusRow"></div>
+
+                    <!-- LOWER GRID: Store Metrics | Event Log -->
+                    <div class="lower-grid">
+                        <!-- Store metrics table -->
+                        <div class="panel">
+                            <div class="panel-header">
+                                <span class="panel-title">Store Metrics</span>
+                                <button class="panel-refresh" onclick="refresh()" title="Refresh">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="1 4 1 10 7 10" />
+                                        <path d="M3.51 15a9 9 0 1 0 .49-3.45" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <table class="store-table">
+                                <thead>
+                                    <tr>
+                                        <th>Store</th>
+                                        <th>Reads</th>
+                                        <th>Writes</th>
+                                        <th>Queries</th>
+                                        <th>Errors</th>
+                                        <th>RAM</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="storeTableBody">
+                                    <tr>
+                                        <td colspan="6" style="color:var(--text-dim);padding:1.2rem 1.1rem">No stores</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Event log -->
+                        <div class="panel">
+                            <div class="panel-header">
+                                <span class="panel-title">System Events</span>
+                                <button class="panel-refresh" onclick="refresh()" title="Refresh">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="1 4 1 10 7 10" />
+                                        <path d="M3.51 15a9 9 0 1 0 .49-3.45" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="event-log" id="eventLog">
+                                <div class="event-empty">No events yet</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- QUICK ACCESS -->
+                    <div class="quick-access">
+                        <div class="section-heading">Quick Access</div>
+                        <div class="nav-cards">
+                            <a href="/stores" class="nav-card">
+                                <div class="nav-card-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                                    </svg>
+                                </div>
+                                <h3>Stores</h3>
+                                <p>Create, configure, and manage your data stores.</p>
+                                <div class="nav-card-arrow">Open &rsaquo;</div>
+                            </a>
+                            <a href="/config" class="nav-card">
+                                <div class="nav-card-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="3" />
+                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                    </svg>
+                                </div>
+                                <h3>Settings</h3>
+                                <p>Configure database name and server settings.</p>
+                                <div class="nav-card-arrow">Open &rsaquo;</div>
+                            </a>
+                            <a href="/security" class="nav-card">
+                                <div class="nav-card-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    </svg>
+                                </div>
+                                <h3>Security</h3>
+                                <p>Manage authentication, passwords, and active sessions.</p>
+                                <div class="nav-card-arrow">Open &rsaquo;</div>
+                            </a>
+                        </div>
+                    </div>
+
+                </div><!-- /dashContent -->
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script>
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function fmtBytes(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+            return (b / 1048576).toFixed(1) + ' MB';
+        }
+        function fmtNum(n) {
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return String(n);
+        }
+        function fmtTime(ts) {
+            const d = new Date(ts * 1000);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        function fmtUptime(startedAt) {
+            if (!startedAt) return '\u2014';
+            var secs = Math.floor(Date.now() / 1000 - startedAt);
+            if (secs < 60) return secs + 's';
+            if (secs < 3600) return Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+            var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+            if (h < 24) return h + 'h ' + m + 'm';
+            var d = Math.floor(h / 24);
+            return d + 'd ' + (h % 24) + 'h';
+        }
+
+        async function api(action, data) {
+            data = data || {};
+            const res = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ action }, data))
+            });
+            if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthenticated'); }
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message || 'Server error');
+            return json.result;
+        }
+
+        function toast(msg, type, dur) {
+            type = type || 'info'; dur = dur || 3500;
+            const el = document.createElement('div');
+            el.className = 'toast toast-' + type;
+            el.textContent = msg;
+            document.getElementById('toastContainer').appendChild(el);
+            requestAnimationFrame(function () { el.classList.add('show'); });
+            setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 300); }, dur);
+        }
+
+        async function initAuth() {
+            try {
+                const res = await fetch('/auth/status');
+                const d = await res.json();
+                if (d.enabled) document.getElementById('logoutBtn').style.display = '';
+            } catch (e) { }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            document.cookie = 'mkdb_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            window.location.href = '/login';
+        }
+
+        function renderDashboard(d) {
+            // DB stats
+            document.getElementById('statDbName').textContent = d.db.name || 'Unnamed';
+            document.getElementById('statDbPath').textContent = d.db.base_path || '';
+            document.getElementById('statStoreCount').textContent = d.db.store_count;
+
+            const totalReq = (d.totals.reads || 0) + (d.totals.writes || 0) + (d.totals.queries || 0);
+            document.getElementById('statRequests').textContent = fmtNum(totalReq);
+            document.getElementById('statReqSub').textContent =
+                fmtNum(d.totals.reads) + ' reads · ' + fmtNum(d.totals.writes) + ' writes · ' + fmtNum(d.totals.queries) + ' queries';
+
+            const hEl = document.getElementById('statHealth');
+            const hSub = document.getElementById('statHealthSub');
+            const health = d.db.health || 'ok';
+            const hLabel = { ok: 'Healthy', low: 'Low Keyspace', degraded: 'Degraded' }[health] || health;
+            const hClass = { ok: 'health-ok', low: 'health-low', degraded: 'health-degraded' }[health] || '';
+            hEl.innerHTML = '<span class="' + hClass + '">' + escapeHtml(hLabel) + '</span>';
+            hSub.textContent = d.totals.errors > 0 ? d.totals.errors + ' error(s) recorded' : 'No errors recorded';
+
+            // Uptime
+            var uptimeEl = document.getElementById('statUptime');
+            var uptimeSubEl = document.getElementById('statUptimeSub');
+            if (d.started_at) {
+                uptimeEl.textContent = fmtUptime(d.started_at);
+                var startDate = new Date(d.started_at * 1000);
+                uptimeSubEl.textContent = 'Since ' + startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } else {
+                uptimeEl.textContent = '\u2014';
+                uptimeSubEl.textContent = 'Not started';
+            }
+
+            // Server status badges
+            const srvRow = document.getElementById('serverStatusRow');
+            srvRow.innerHTML = '';
+            const srvNames = { http: 'HTTP Data', socket: 'Socket Data', control: 'Control' };
+            Object.keys(srvNames).forEach(function (k) {
+                const running = d.servers[k] && d.servers[k].running;
+                const b = document.createElement('div');
+                b.className = 'server-badge';
+                b.innerHTML = '<span class="dot ' + (running ? 'dot-on' : 'dot-off') + '"></span>'
+                    + '<span class="server-label">' + escapeHtml(srvNames[k]) + '</span>'
+                    + '<strong style="color:' + (running ? 'var(--green)' : 'var(--red)') + '">'
+                    + (running ? 'Online' : 'Offline') + '</strong>';
+                srvRow.appendChild(b);
+            });
+
+            // Store metrics table
+            const tbody = document.getElementById('storeTableBody');
+            if (!d.stores || d.stores.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);padding:1.2rem 1.1rem">No stores loaded</td></tr>';
+            } else {
+                tbody.innerHTML = d.stores.map(function (s) {
+                    const pct = s.ram ? s.ram.pct : 0;
+                    const fillClass = pct >= 90 ? 'crit' : pct >= 70 ? 'warn' : '';
+                    return '<tr>'
+                        + '<td><a href="/store-config?store=' + encodeURIComponent(s.name) + '&tab=stats" style="color:var(--blue-light);text-decoration:none">'
+                        + escapeHtml(s.name) + '</a></td>'
+                        + '<td>' + fmtNum(s.reads) + '</td>'
+                        + '<td>' + fmtNum(s.writes) + '</td>'
+                        + '<td>' + fmtNum(s.queries) + '</td>'
+                        + '<td style="color:' + (s.errors > 0 ? 'var(--red)' : 'var(--text-dim)') + '">'
+                        + fmtNum(s.errors) + '</td>'
+                        + '<td><div class="store-ram-bar-wrap">'
+                        + '<div class="store-ram-bar"><div class="store-ram-fill ' + fillClass + '" style="width:' + Math.min(100, pct) + '%"></div></div>'
+                        + '<span style="color:var(--text-dim)">' + pct + '%</span>'
+                        + '</div></td>'
+                        + '</tr>';
+                }).join('');
+            }
+
+            // Event log
+            const logEl = document.getElementById('eventLog');
+            const events = d.events || [];
+            if (events.length === 0) {
+                logEl.innerHTML = '<div class="event-empty">No events yet</div>';
+            } else {
+                logEl.innerHTML = events.map(function (e) {
+                    const pillClass = { info: 'pill-info', warning: 'pill-warning', error: 'pill-error', recovery: 'pill-recovery' }[e.level] || 'pill-info';
+                    return '<div class="event-row">'
+                        + '<span class="event-ts">' + fmtTime(e.ts) + '</span>'
+                        + '<span class="event-pill ' + pillClass + '">' + escapeHtml(e.level) + '</span>'
+                        + '<span class="event-source">' + escapeHtml(e.source) + '</span>'
+                        + '<span class="event-msg">' + escapeHtml(e.message) + '</span>'
+                        + '</div>';
+                }).join('');
+            }
+        }
+
+        async function refresh() {
+            try {
+                const d = await api('api_get_dashboard');
+                renderDashboard(d);
+            } catch (e) {
+                toast('Refresh failed: ' + e.message, 'error');
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                const d = await api('api_get_dashboard');
+                document.getElementById('loadingRow').style.display = 'none';
+                document.getElementById('dashContent').style.display = '';
+                renderDashboard(d);
+            } catch (e) {
+                document.getElementById('loadingRow').style.display = 'none';
+                document.getElementById('dashContent').style.display = '';
+                toast('Failed to load dashboard: ' + e.message, 'error');
+            }
+        }
+
+        // Auto-refresh every 15 seconds
+        window.addEventListener('load', function () {
+            initAuth();
+            loadDashboard();
+            setInterval(refresh, 15000);
+        });
+    </script>
+</body>
+
+</html>
