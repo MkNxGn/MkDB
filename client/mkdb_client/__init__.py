@@ -12,6 +12,7 @@ Usage:
 """
 
 from mkdb_client.client import MkDBClient
+from mkdb_client.controller import MkDBController, ControllerError
 from mkdb_client.responses import (
     GetResponse,
     WriteResponse,
@@ -23,6 +24,8 @@ from mkdb_client.responses import (
 __version__ = "0.1.0"
 __all__ = [
     "MkDBClient",
+    "MkDBController",
+    "ControllerError",
     "GetResponse",
     "WriteResponse",
     "DeleteResponse",

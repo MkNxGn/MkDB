@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymkdb-client"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python client SDK for MkDB — connects via TCP socket or HTTP."
 readme = "README.md"
 license = { text = "MIT" }

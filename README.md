@@ -30,7 +30,7 @@ MkDB is a Custom Log-Structured Merge & Partitioned Redundant Storage Engine bui
 ### Starting the Server
 MkDB operates as a CLI tool. Launch the engine by pointing it to your desired database directory (which must contain a `config.json` file configuring your stores and network bindings):
 ```bash
-mkdb /path/to/your/db
+python mkdb.py /path/to/your/db
 ```
 Once running, the database will host both TCP socket and HTTP interfaces as specified in your `config.json`. The web control panel is accessible via your browser (check server output for the bound port, normally `http://localhost:<port>`).
 
@@ -38,10 +38,10 @@ Once running, the database will host both TCP socket and HTTP interfaces as spec
 The `MkDBClient` connects seamlessly to your database and abstracts the dual-protocol system:
 
 ```python
-from mkdb_client import MkDBClient
+from sdk.mkdb_client import MkDBClient
 
-client = MkDBClient(host="127.0.0.1", port=8080)
-client.connect()
+client = MkDBClient()
+client.connect(host="127.0.0.1", port=8080)
 
 # Writing a document (computes delta updates intelligently)
 client.set(
