@@ -176,6 +176,8 @@ def api_update_store_config(database: mkdb, data: dict):
         store.client_id_header = str(data["client_id_header"]).strip()
     if "protect_reads" in data:
         store.protect_reads = bool(data["protect_reads"])
+    if "nested_queries_enabled" in data:
+        store.nested_queries_enabled = bool(data["nested_queries_enabled"])
     if "description" in data:
         store.description = data["description"]
     if "schema_config" in data:
@@ -221,6 +223,88 @@ def api_update_store_config(database: mkdb, data: dict):
                 f"{TOKEN_HARD_LIMIT} characters. Performance may degrade."
             )
     return response
+
+def api_discover_store_fields(database: mkdb, data: dict):
+    """Scan all stored records and add any unseen fields to schema_config."""
+    store_name: str = data.get("name", "").strip()
+
+    if not store_name:
+        raise ValueError("Store name is required")
+    if database is None:
+        raise RuntimeError("Database not initialized")
+    if store_name not in database.stores:
+        raise ValueError(f"Store '{store_name}' does not exist or is not running")
+
+    store_obj = database.stores[store_name]
+    qe = getattr(store_obj, "query_engine", None)
+    if qe is None:
+        raise RuntimeError(f"Store '{store_name}' has no query engine")
+
+    new_count = qe.discover_fields()
+    return {
+        "store_name": store_name,
+        "new_fields": new_count,
+        "message": (
+            f"{new_count} new field(s) discovered and added to schema."
+            if new_count else "No new fields found."
+        ),
+    }
+
+def api_rebuild_store_indexes(database: mkdb, data: dict):
+    """Rebuild all queryable-field indexes for a store from stored record data.
+
+    Optionally rebuild only a single field when *field* is supplied.
+    Runs synchronously — may take a while for large stores.
+    """
+    store_name: str = data.get("name", "").strip()
+    field: str = data.get("field", "").strip()  # optional — omit to rebuild all
+
+    if not store_name:
+        raise ValueError("Store name is required")
+    if database is None:
+        raise RuntimeError("Database not initialized")
+    if store_name not in database.stores:
+        raise ValueError(f"Store '{store_name}' does not exist or is not running")
+
+    store_obj = database.stores[store_name]
+    qe = getattr(store_obj, "query_engine", None)
+    if qe is None:
+        raise RuntimeError(f"Store '{store_name}' has no query engine")
+
+    schema = getattr(store_obj.config, "schema_config", None)
+    if schema is None:
+        raise RuntimeError(f"Store '{store_name}' has no schema_config")
+
+    if field:
+        # Single-field rebuild
+        qe.rebuild_index(field)
+        rebuilt = [field]
+    else:
+        # Rebuild every queryable field
+        rebuilt = []
+        errors = []
+        for field_name, fs in schema.fields.items():
+            q = getattr(fs, "queryable", False)
+            if not q or q is False:
+                continue
+            try:
+                qe.rebuild_index(field_name)
+                rebuilt.append(field_name)
+            except Exception as exc:
+                errors.append(f"{field_name}: {exc}")
+        if errors:
+            raise RuntimeError("Some indexes failed to rebuild: " + "; ".join(errors))
+
+    return {
+        "store_name": store_name,
+        "rebuilt": rebuilt,
+        "count": len(rebuilt),
+        "message": (
+            f"{len(rebuilt)} index(es) rebuilt: {', '.join(rebuilt)}."
+            if rebuilt else "No queryable fields to rebuild."
+        ),
+    }
+
 
 def api_export_store_json(database: mkdb, data: dict):
     """Export a store's complete configuration as JSON."""

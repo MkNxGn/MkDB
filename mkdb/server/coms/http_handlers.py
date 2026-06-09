@@ -432,10 +432,7 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
         r = _execute(
             self.database, "query",
             str(data.get("store", "")).strip(),
-            {
-                "filter":  data.get("filter", {}),
-                "hydrate": bool(data.get("hydrate", False)),
-            },
+            data,
             self._resolve_client_key(str(data.get("store", "")).strip()), "http",
         )
         self._ok(r.data) if r.ok else self._err(r.error, r.http_code)

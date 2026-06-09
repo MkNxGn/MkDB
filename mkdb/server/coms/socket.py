@@ -36,13 +36,16 @@ import socket
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Optional
 
-from mkdb.server.coms.socket_protocol import read_frame, write_frame
+from mkdb.server.coms.socket_protocol import read_frame, write_frame, encode_message
 from mkdb.server.coms.actions import execute as _execute
 
 logger = logging.getLogger(__name__)
+
+_MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # must match client MAX_FRAME
 
 # Default write password enforced when no users are configured in the DB.
 _DEFAULT_WRITE_PASSWORD = "mk_db"
@@ -58,6 +61,10 @@ class ClientSession:
     username:      str   = ""      # empty = unauthenticated / open-mode
     can_read:      bool  = True    # True for R and RW sessions
     can_write:     bool  = False   # True for W and RW sessions after auth
+    write_lock:    threading.Lock = None
+
+    def __post_init__(self):
+        self.write_lock = threading.Lock()
 
 
 class SocketServer:
@@ -75,6 +82,9 @@ class SocketServer:
         self._subscriptions: dict = {}   # store_name -> set of addr_str keys
         self._running:     bool  = False
         self._lock:        threading.Lock = threading.Lock()
+        self._executor:    ThreadPoolExecutor = ThreadPoolExecutor(
+            max_workers=max_clients * 2, thread_name_prefix="SocketServer-Worker"
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -96,6 +106,7 @@ class SocketServer:
 
     def stop(self) -> None:
         self._running = False
+        self._executor.shutdown(wait=False)
         if self._server_sock:
             try:
                 self._server_sock.close()
@@ -216,7 +227,7 @@ class SocketServer:
         )
 
         try:
-            write_frame(conn, {
+            self._safe_write(session, {
                 "type":           "permissions",
                 "read_protected":  has_users and protect_reads,
                 # Writes are always protected — real users or the default password
@@ -229,7 +240,7 @@ class SocketServer:
                 return
             client_access = str(access_msg.get("access", "R")).upper()
             if client_access not in ("R", "W", "RW"):
-                write_frame(conn, {"type": "error", "error": "access must be 'R', 'W', or 'RW'"})
+                self._safe_write(session, {"type": "error", "error": "access must be 'R', 'W', or 'RW'"})
                 return
 
             # Writes always need auth (real users, or default password if none configured).
@@ -237,10 +248,10 @@ class SocketServer:
             need_auth = client_access in ("W", "RW") or (protect_reads and client_access == "R")
 
             if need_auth:
-                write_frame(conn, {"type": "auth_required"})
+                self._safe_write(session, {"type": "auth_required"})
                 auth_msg = read_frame(conn)
                 if not auth_msg or auth_msg.get("type") != "auth":
-                    write_frame(conn, {"type": "error", "error": "Expected auth message"})
+                    self._safe_write(session, {"type": "error", "error": "Expected auth message"})
                     return
                 username = str(auth_msg.get("username", ""))
                 password = str(auth_msg.get("password", ""))
@@ -249,7 +260,7 @@ class SocketServer:
                     from mkdb.server.control.server import verify_password
                     user = db.config.users.get(username)
                     if user is None or not verify_password(password, user.password_hash):
-                        write_frame(conn, {"type": "error", "error": "Invalid credentials"})
+                        self._safe_write(session, {"type": "error", "error": "Invalid credentials"})
                         return
                     session.username = username
                 else:
@@ -257,16 +268,16 @@ class SocketServer:
                     # unless it has been explicitly disabled in config.
                     ds = getattr(getattr(db, "config", None), "data_security", None)
                     if getattr(ds, "disable_default_password", False):
-                        write_frame(conn, {"type": "error", "error": "Write access disabled — configure users to enable writes"})
+                        self._safe_write(session, {"type": "error", "error": "Write access disabled — configure users to enable writes"})
                         return
                     if password != _DEFAULT_WRITE_PASSWORD:
-                        write_frame(conn, {"type": "error", "error": "Invalid credentials"})
+                        self._safe_write(session, {"type": "error", "error": "Invalid credentials"})
                         return
 
                 session.authenticated = True
                 session.can_read      = client_access in ("R", "RW")
                 session.can_write     = client_access in ("W", "RW")
-                write_frame(conn, {
+                self._safe_write(session, {
                     "type":      "auth_ok",
                     "username":  username,
                     "can_read":  session.can_read,
@@ -279,7 +290,7 @@ class SocketServer:
                 session.authenticated = True
                 session.can_read      = True
                 session.can_write     = False
-                write_frame(conn, {"type": "ready", "can_read": True, "can_write": False})
+                self._safe_write(session, {"type": "ready", "can_read": True, "can_write": False})
 
         except (ConnectionError, OSError) as exc:
             logger.warning("SocketServer: handshake error with %s: %s", addr_str, exc)
@@ -325,19 +336,21 @@ class SocketServer:
                     store_name = msg.get("store", "")
                     with self._lock:
                         self._subscriptions.setdefault(store_name, set()).add(addr_str)
-                    try:
-                        write_frame(conn, {"type": "subscribed", "store": store_name})
-                    except Exception:
+                    if not self._safe_write(session, {"type": "subscribed", "store": store_name}):
                         break
                     continue
 
                 # Handle requests
                 if msg_type == "request":
-                    response = self._handle_request(msg, session)
-                    try:
-                        write_frame(conn, response)
-                    except Exception:
-                        break
+                    correlation_id = msg.get("id")
+                    
+                    # 1. Immediate ACK (Receipt)
+                    if correlation_id:
+                        self._safe_write(session, {"type": "receipt", "id": correlation_id})
+                    
+                    # 2. Dispatch to worker pool
+                    self._executor.submit(self._process_background_request, msg, session)
+                    continue
 
         finally:
             self._unregister(addr_str)
@@ -346,6 +359,31 @@ class SocketServer:
             except Exception:
                 pass
             logger.info("SocketServer: client disconnected %s", addr_str)
+
+    def _process_background_request(self, msg: dict, session: ClientSession) -> None:
+        """Executed in a worker thread to keep the main read loop free."""
+        try:
+            response = self._handle_request(msg, session)
+            
+            # Check for oversized response
+            frame = encode_message(response)
+            if len(frame) > _MAX_RESPONSE_BYTES:
+                response = {
+                    "type":   "response",
+                    "id":     response.get("id"),
+                    "status": "error",
+                    "data":   None,
+                    "error":  (
+                        f"Response too large ({len(frame):,} bytes > "
+                        f"{_MAX_RESPONSE_BYTES:,} byte limit). "
+                        "Use hydrate=False or apply more specific filters."
+                    ),
+                }
+            
+            if not self._safe_write(session, response):
+                logger.debug("Failed to send response to %s (disconnected)", session.addr)
+        except Exception as exc:
+            logger.error("Error processing request from %s: %s", session.addr, exc)
 
     # ------------------------------------------------------------------
     # Heartbeat
@@ -356,9 +394,7 @@ class SocketServer:
             time.sleep(self.heartbeat_interval)
             if addr_str not in self._clients:
                 break
-            try:
-                write_frame(conn, {"type": "ping"})
-            except Exception:
+            if not self._safe_write(session, {"type": "ping"}):
                 break
             # Check pong timeout
             if time.time() - session.last_pong > 2 * self.heartbeat_interval:
@@ -384,9 +420,7 @@ class SocketServer:
             if session is None:
                 dead.add(addr_str)
                 continue
-            try:
-                write_frame(session.conn, event)
-            except Exception:
+            if not self._safe_write(session, event):
                 dead.add(addr_str)
         # Clean up dead subscribers
         if dead:
@@ -450,6 +484,9 @@ class SocketServer:
             "delta":     msg.get("delta", {}),
             "filter":    msg.get("filter", {}),
             "hydrate":   bool(msg.get("hydrate", False)),
+            "sort":      msg.get("sort"),
+            "limit":     msg.get("limit"),
+            "offset":    msg.get("offset"),
         }
         r = _execute(db, action, store_name, params, client_key, "socket",
                      on_broadcast=self.broadcast)
@@ -464,3 +501,13 @@ class SocketServer:
             self._clients.pop(addr_str, None)
             for subs in self._subscriptions.values():
                 subs.discard(addr_str)
+
+    def _safe_write(self, session: ClientSession, payload: dict) -> bool:
+        """Send a frame safely using the session's write lock."""
+        try:
+            frame = encode_message(payload)
+            with session.write_lock:
+                session.conn.sendall(frame)
+            return True
+        except Exception:
+            return False

@@ -53,10 +53,11 @@ class QueryDispatcher:
     config     : query_worker_config
     """
 
-    def __init__(self, store_name: str, base_path: str, config) -> None:
+    def __init__(self, store_name: str, base_path: str, config, store_config=None) -> None:
         self.store_name = store_name
         self.base_path  = base_path
         self.config     = config
+        self.store_config_dict = store_config.json if store_config else {}
 
         # -- Shared queues ---------------------------------------------------
         # work_queue:    dispatcher → workers (all workers compete for items)
@@ -191,16 +192,18 @@ class QueryDispatcher:
 
         return result["data"]
 
-    def invalidate(self, record_id: str) -> None:
+    def invalidate(self, record_id: str, metadata: Any = None) -> None:
         """
         Broadcast a cache-invalidation message to every worker.
 
         Called by the write queue after a record is flushed to disk so that
-        stale entries are purged from all worker caches before the next read.
+        stale entries are purged from all worker caches and the worker-local
+        IndexManager is updated.
         """
+        msg = {"id": record_id, "meta": metadata}
         for inv_q in self._invalidation_queues:
             try:
-                inv_q.put_nowait(record_id)
+                inv_q.put_nowait(msg)
             except Exception:
                 pass  # non-fatal if queue is full or closed
 
@@ -260,6 +263,7 @@ class QueryDispatcher:
                     self.config.worker_cache_size,
                     float(self.config.worker_cache_ttl),
                     self._stop_event,
+                    self.store_config_dict,
                 ),
                 daemon=True,
                 name=f"QueryWorker[{self.store_name}#{i}]",
@@ -283,6 +287,7 @@ class QueryDispatcher:
                 self.config.worker_cache_size,
                 float(self.config.worker_cache_ttl),
                 self._stop_event,
+                self.store_config_dict,
             ),
             daemon=True,
             name=f"QueryWorker[{self.store_name}#thread]",

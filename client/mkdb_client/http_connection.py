@@ -148,7 +148,13 @@ class HttpConnection:
 
     def _http_post(self, path: str, payload: dict) -> dict:
         url = self._base_url + path
-        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        
+        def _json_default(obj):
+            if isinstance(obj, set):
+                return list(obj)
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+        data = json.dumps(payload, ensure_ascii=False, default=_json_default).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=self._headers(content_type=True), method="POST")
         try:
             with urllib.request.urlopen(req, timeout=self.recv_timeout) as resp:

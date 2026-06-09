@@ -11,8 +11,11 @@ the in-memory map is evicted.  Pending mutations are buffered and flushed
 to disk before each query and at each explicit save() call.
 """
 
+import logging
 import os
 from mkdb.db.query.tokenizer import tokenize
+
+logger = logging.getLogger(__name__)
 
 
 class FullTextIndex:
@@ -35,7 +38,10 @@ class FullTextIndex:
     def load(self) -> None:
         """Load the index from disk into _map."""
         if not os.path.exists(self.path):
+            logger.debug("FullTextIndex file %s does not exist.", self.path)
             return
+        
+        count = 0
         with open(self.path, "r", encoding="utf-8") as fh:
             for raw in fh:
                 line = raw.strip()
@@ -44,6 +50,8 @@ class FullTextIndex:
                 stem, _, ids_str = line.partition(":")
                 ids = set(ids_str.split(",")) if ids_str else set()
                 self._map[stem] = ids
+                count += len(ids)
+        logger.info("Loaded %d stems (%d total record refs) from %s", len(self._map), count, self.path)
         self._apply_threshold()
 
     def save(self) -> None:

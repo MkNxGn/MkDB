@@ -115,9 +115,13 @@ class store_config(base_object):
     def __init__(self, data:dict={}):
         self.name = ""
         self.description = ""
+        self.default_query_limit = 300      # 0 = unlimited; default limit if query doesn't provide one
         self.protect_reads = False          # when True, read/query also require auth
         self.slow_query_threshold_ms = 0.0  # 0 = disabled; >0 = log queries slower than X ms
         self.client_id_header = ""          # HTTP header to use as client identifier; "" = remote_addr
+        self.schema_auto_discover_on_boot  = False  # scan stored records for new fields on startup
+        self.schema_auto_discover_on_write = False  # add unseen fields to schema on every write
+        self.nested_queries_enabled = False         # allow dot-notation lookups (e.g. "a.b.c"); may impact performance
         self.file_config = file_config(data.get("file_config", {}))
         self.entity_config = entity_config(data.get("entity_config", {}))
         self.ram_config = ram_config(data.get("ram_config", {}))

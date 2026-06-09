@@ -866,6 +866,16 @@
                                     <span class="switch-slider"></span>
                                 </label>
                             </div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Enable Nested Queries</strong>
+                                    <span>Allow dot-notation (e.g. "user.profile.age") in queries and writes</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="basicNestedQueries">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
                             <div class="save-row">
                                 <button class="btn btn-primary" onclick="saveBasic()">Save</button>
                             </div>
@@ -1227,9 +1237,39 @@
                                     </tr>
                                 </tbody>
                             </table>
-                            <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center">
+                            <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap">
                                 <input type="text" id="newFieldName" placeholder="field_name" style="max-width:200px">
                                 <button class="btn" onclick="schemaAddField()">+ Add Field</button>
+                                <button class="btn btn-secondary" id="discoverFieldsBtn" onclick="discoverFields()">&#128270; Find New Fields</button>
+                                <button class="btn btn-secondary" id="rebuildIndexesBtn" onclick="rebuildIndexes()">&#9881;&#65039; Rebuild Indexes</button>
+                            </div>
+                        </div>
+                        <div class="card" style="margin-top:1rem">
+                            <div class="section-heading">Auto-Discovery</div>
+                            <p class="section-sub">Automatically detect fields from record data and add them to the schema (non-queryable). Fields added this way can then be made queryable manually.</p>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Discover on Boot</strong>
+                                    <span>Scan all stored records for new fields when the server starts</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="schemaDiscoverOnBoot">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <hr class="divider">
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Discover on Write</strong>
+                                    <span>Add unseen fields to the schema whenever a record is written</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="schemaDiscoverOnWrite">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div style="margin-top:1rem">
+                                <button class="btn btn-primary" onclick="saveSchemaSettings()">Save Settings</button>
                             </div>
                         </div>
                         <div style="margin-top:1rem">
@@ -1318,6 +1358,7 @@
             document.getElementById('basicName').value = storeName;
             document.getElementById('basicDesc').value = config.description || config.desc || '';
             document.getElementById('basicProtectReads').checked = !!(config.protect_reads);
+            document.getElementById('basicNestedQueries').checked = !!(config.nested_queries_enabled);
             document.getElementById('basicClientIdHeader').value = config.client_id_header || '';
 
             // File
@@ -1350,6 +1391,8 @@
 
             // Schema
             populateSchema((config.schema_config || {}).fields || {});
+            document.getElementById('schemaDiscoverOnBoot').checked = !!(config.schema_auto_discover_on_boot);
+            document.getElementById('schemaDiscoverOnWrite').checked = !!(config.schema_auto_discover_on_write);
         }
 
         function updateCombinations() {
@@ -1398,10 +1441,11 @@
         async function saveBasic() {
             var desc = document.getElementById('basicDesc').value.trim();
             var protectReads = document.getElementById('basicProtectReads').checked;
+            var nestedQueries = document.getElementById('basicNestedQueries').checked;
             var clientIdHeader = document.getElementById('basicClientIdHeader').value.trim();
             try {
                 await api('api_update_store', { name: storeName, description: desc });
-                await api('api_update_store_config', { name: storeName, protect_reads: protectReads, client_id_header: clientIdHeader });
+                await api('api_update_store_config', { name: storeName, protect_reads: protectReads, client_id_header: clientIdHeader, nested_queries_enabled: nestedQueries });
                 toast('Basic settings saved.', 'success');
             } catch (e) {
                 toast('Save failed: ' + e.message, 'error');
@@ -1684,18 +1728,35 @@
             tbody.innerHTML = names.map(function (k) {
                 var f = _schemaFields[k];
                 var qVal = f.queryable === false ? 'false' : String(f.queryable);
-                return '<tr>' +
+                return '<tr data-field="' + escapeHtml(k) + '">' +
                     '<td style="font-family:monospace">' + escapeHtml(k) + '</td>' +
-                    '<td><select onchange="_schemaFields[' + JSON.stringify(k) + '].queryable = this.value === \'false\' ? false : this.value">' +
+                    '<td><select onchange="schemaSetQueryable(this)">' +
                     '<option value="false"' + (qVal === 'false' ? ' selected' : '') + '>None</option>' +
-                    '<option value="exact"' + (qVal === 'exact' ? ' selected' : '') + '>Exact</option>' +
                     '<option value="full-text"' + (qVal === 'full-text' ? ' selected' : '') + '>Full-text</option>' +
                     '<option value="numeric"' + (qVal === 'numeric' ? ' selected' : '') + '>Numeric</option>' +
                     '</select></td>' +
-                    '<td style="text-align:center"><input type="checkbox"' + (f.indexed ? ' checked' : '') + ' onchange="_schemaFields[' + JSON.stringify(k) + '].indexed = this.checked"></td>' +
-                    '<td><button class="btn btn-sm btn-danger" onclick="schemaRemoveField(' + JSON.stringify(k) + ')">Remove</button></td>' +
+                    '<td style="text-align:center"><input type="checkbox"' + (f.indexed ? ' checked' : '') + ' onchange="schemaSetIndexed(this)"></td>' +
+                    '<td><button class="btn btn-sm btn-danger" onclick="schemaRemoveFieldEl(this)">Remove</button></td>' +
                     '</tr>';
             }).join('');
+        }
+
+        function _rowKey(el) {
+            return el.closest('tr').dataset.field;
+        }
+
+        function schemaSetQueryable(el) {
+            var k = _rowKey(el);
+            _schemaFields[k].queryable = el.value === 'false' ? false : el.value;
+        }
+
+        function schemaSetIndexed(el) {
+            var k = _rowKey(el);
+            _schemaFields[k].indexed = el.checked;
+        }
+
+        function schemaRemoveFieldEl(el) {
+            schemaRemoveField(_rowKey(el));
         }
 
         function schemaAddField() {
@@ -1724,6 +1785,52 @@
                 toast('Schema saved.', 'success');
             } catch (e) {
                 toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveSchemaSettings() {
+            var onBoot = document.getElementById('schemaDiscoverOnBoot').checked;
+            var onWrite = document.getElementById('schemaDiscoverOnWrite').checked;
+            try {
+                await api('api_update_store_config', { name: storeName, schema_auto_discover_on_boot: onBoot, schema_auto_discover_on_write: onWrite });
+                toast('Auto-discovery settings saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function discoverFields() {
+            var btn = document.getElementById('discoverFieldsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Scanning…';
+            try {
+                var result = await api('api_discover_store_fields', { name: storeName });
+                toast(result.message || 'Done.', result.new_fields > 0 ? 'success' : 'info');
+                if (result.new_fields > 0) {
+                    // Reload config so table shows the new fields
+                    var cfg = await api('api_get_store_config', { name: storeName });
+                    populateSchema((cfg.schema_config || {}).fields || {});
+                }
+            } catch (e) {
+                toast('Discovery failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '\u{1F50E} Find New Fields';
+            }
+        }
+
+        async function rebuildIndexes() {
+            var btn = document.getElementById('rebuildIndexesBtn');
+            btn.disabled = true;
+            btn.textContent = 'Rebuilding…';
+            try {
+                var result = await api('api_rebuild_store_indexes', { name: storeName });
+                toast(result.message || 'Done.', result.count > 0 ? 'success' : 'info');
+            } catch (e) {
+                toast('Rebuild failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '\u2699\uFE0F Rebuild Indexes';
             }
         }
 
