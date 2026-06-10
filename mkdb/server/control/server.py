@@ -111,11 +111,13 @@ _ACTION_ROLES: dict[str, str] = {
     "api_get_store_metrics":      "viewer",
     "api_get_all_store_metrics":  "viewer",
     # operator
-    "api_create_store":           "operator",
-    "api_delete_store":           "operator",
-    "api_update_store":           "operator",
-    "api_update_store_config":    "operator",
-    "api_reset_store_metrics":    "operator",
+    "api_create_store":              "operator",
+    "api_delete_store":              "operator",
+    "api_update_store":              "operator",
+    "api_update_store_config":       "operator",
+    "api_reset_store_metrics":       "operator",
+    "api_discover_store_fields":     "operator",
+    "api_rebuild_store_indexes":     "operator",
     # admin
     "api_update_server_config":   "admin",
     "api_server_control":         "admin",
@@ -213,6 +215,10 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path.rstrip("/") or "/"
+
+        if path == "/check_active":
+            self._json(200, {"active": True})
+            return
 
         if path == "/":
             self._redirect("/home")

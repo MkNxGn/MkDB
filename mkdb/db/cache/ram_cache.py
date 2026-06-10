@@ -80,20 +80,33 @@ class RamCache:
             total += sys.getsizeof(self._store)
             return total
 
-    def apply_delta(self, record_id: str, delta: dict) -> None:
+    def apply_delta(self, record_id: str, delta: dict, nested_enabled: bool = False) -> None:
         """
-        Merge delta flat-paths into the existing cached object (upsert).
-        If the record is not cached, create a new entry with just the delta.
+        Merge delta paths into the existing cached object.
+        Supports both shallow keys and dot-notation paths (e.g. "a.b") via partitioning 
+        if nested_enabled is True.
         """
+        from mkdb.objects import partition_object, deep_update
         with self._lock:
-            if record_id in self._store:
-                self._store[record_id].update(delta)
-                self._touch(record_id)
+            if nested_enabled:
+                partitioned = partition_object(delta)
+                if record_id in self._store:
+                    self._store[record_id] = deep_update(self._store[record_id], partitioned)
+                    self._touch(record_id)
+                else:
+                    self._store[record_id] = partitioned
+                    self._access_log[record_id] = None
+                    self._freq[record_id] = 1
+                    self._timestamps[record_id] = time.time()
             else:
-                self._store[record_id] = dict(delta)
-                self._access_log[record_id] = None
-                self._freq[record_id] = 1
-                self._timestamps[record_id] = time.time()
+                if record_id in self._store:
+                    self._store[record_id].update(delta)
+                    self._touch(record_id)
+                else:
+                    self._store[record_id] = dict(delta)
+                    self._access_log[record_id] = None
+                    self._freq[record_id] = 1
+                    self._timestamps[record_id] = time.time()
 
     def evict(self) -> None:
         """

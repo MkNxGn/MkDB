@@ -34,32 +34,50 @@ client.connect()
 client.close()
 ```
 
-`transport="socket"` opens a persistent TCP connection and supports pub-sub (`on_update`).  
+`transport="socket"` opens a persistent TCP connection and supports pub-sub (`on_update`). The socket protocol is **multiplexed**, allowing multiple concurrent requests and out-of-order responses.  
 `transport="http"` makes a fresh HTTP request per call — no pub-sub support.
+
+### Async Support (Multiplexing)
+
+The socket-based `MkDBClient` supports asynchronous operations through the **Multiplexed Protocol**. This allows you to fire off multiple requests without waiting for previous ones to finish.
+
+- **Non-blocking:** Every call returns a `MkDBTask` immediately.
+- **Out-of-Order:** Small queries won't be blocked by large, slow ones on the same connection.
+- **Fail-Fast:** Uses a "Receipt ACK" system. If the server doesn't acknowledge receipt within 1s, the client detects the dead connection and reconnects immediately.
+
+```python
+# Launch multiple tasks in parallel
+task1 = client.query_async("products", {"price": {"lt": 10}})
+task2 = client.get_async("stats", "today")
+
+# Do other work...
+print("Working...")
+
+# Wait for results later
+results = task1.result()  # blocks until ready
+stats = task2.result()
+```
 
 ---
 
-### `client.get(store, record_id) → GetResponse`
+### `client.get(store, record_id, as_type=None) → GetResponse`
 
 Read a single record by ID.
 
 ```python
 resp = client.get("products", "prod_001")
 if resp.found:
-    print(resp.data)   # dict of field values
+    print(resp.data)   # dict (default) or SnapshotBaseObject (if tracking enabled)
 ```
 
-| Attribute | Type | Description |
-|---|---|---|
-| `record_id` | `str` | The ID that was requested |
-| `data` | `dict \| None` | Record fields, or `None` if not found |
-| `found` | `bool` | `True` if the record exists |
+- **`as_type`**: Optional class to wrap the data. If the class inherits from `SnapshotBaseObject`, it enables `.patch()`.
+- **Note**: If `track_records=True` was passed to the client constructor, this returns a `SnapshotBaseObject` by default.
 
-`GetResponse` is truthy when `found=True`.
+See [Record Tracking](RECORD_TRACKING.md) for details on using `.patch()`.
 
 ---
 
-### `client.set(store, record_id, delta, flatten_nested=True) → WriteResponse`
+### `client.set(store, record_id, delta) → WriteResponse`
 
 Write or update a record. Only the supplied fields are changed (delta write).
 
@@ -68,16 +86,17 @@ resp = client.set("products", "prod_001", {"name": "Steel Bolt", "price": 9.99})
 print(resp.record_id)
 ```
 
-When `flatten_nested=True` (default), nested dicts are automatically flattened to dot-notation keys before sending:
+Nested objects are stored as-is. You can query them using dot-notation if the server is configured via `nested_queries_enabled: true`.
 
 ```python
 client.set("products", "prod_001", {"meta": {"colour": "silver"}})
-# sent as: {"meta.colour": "silver"}
 ```
+
+**Async version:** `client.set_async(store, record_id, delta) → MkDBTask`
 
 ---
 
-### `client.insert(store, delta, flatten_nested=True) → WriteResponse`
+### `client.insert(store, delta) → WriteResponse`
 
 Write a new record with a **server-generated ID**.
 
@@ -85,6 +104,8 @@ Write a new record with a **server-generated ID**.
 resp = client.insert("products", {"name": "Widget", "price": 4.99})
 print(resp.record_id)  # e.g. "aB3xKq7mNpRt"
 ```
+
+**Async version:** `client.insert_async(store, delta) → MkDBTask`
 
 ---
 
@@ -110,19 +131,22 @@ print(resp.record_id)
 
 ---
 
-### `client.query(store, filter_dict, hydrate=False) → QueryResponse`
+### `client.query(store, filter_dict, hydrate=False, sort=None, limit=None, offset=None) → QueryResponse`
 
-Query a store using a filter dict. Returns matching record IDs by default, or full records when `hydrate=True`.
+Search for records in a store. You can pass a raw `dict` or a `Q` object.
 
 ```python
-# Returns IDs only
-resp = client.query("products", {"price": {"lte": 10.00}})
-print(resp.count, resp.ids)
+from mkdb_client import Q
 
-# Returns full records
-resp = client.query("products", {"name": ["bolt", "screw"]}, hydrate=True)
-for record in resp:   # iterates records when hydrated, IDs otherwise
-    print(record)
+# Fluent query builder with logical operators and pagination
+q = (Q.field("price").lt(100) 
+     & Q.field("category").is_included(["deals", "clearance"])) \
+     .sort("-price").limit(10)
+
+results = client.query("products", q, hydrate=True)
+
+for record in results:
+    print(record["_id"], record["name"])
 ```
 
 **Filter syntax:**
@@ -130,13 +154,26 @@ for record in resp:   # iterates records when hydrated, IDs otherwise
 | Filter | Meaning |
 |---|---|
 | `{"field": "exact"}` | Exact string match |
-| `{"field": ["kw1", "kw2"]}` | Full-text AND — both keywords must appear |
+| `{"field": ["kw1", "kw2"]}` | Full-text AND search |
 | `{"field": 42}` | Numeric exact match |
 | `{"field": {"gt": 5, "lte": 20}}` | Numeric range (`gt`, `gte`, `lt`, `lte`) |
+| `{"field": {"in": [1, 2]}}` | Inclusion check (`in`, `nin`) |
+| `{"field": {"exists": True}}` | Field existence check |
 | Multiple keys | AND — all conditions must match |
+
+**Logical Operators (Q Builder):**
+- `&` : Logical AND
+- `|` : Logical OR
+
+```python
+q = Q.field("deleted").eq(False) & (Q.field("type").eq("A") | Q.field("type").eq("B"))
+```
 
 `QueryResponse` attributes: `count`, `ids`, `records` (only when `hydrate=True`), `store`.  
 It is truthy when `count > 0` and supports `len()` and iteration.
+
+**Async version:** `client.query_async(store, filter_dict, hydrate=False, sort=None, limit=None, offset=None) → MkDBTask`
+
 
 ---
 

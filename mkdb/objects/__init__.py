@@ -89,7 +89,22 @@ class base_object:
     def __repr__(self) -> str:
         return str(self.json) # "base_object: " + json.dumps(self.json)
 
-def partition_object(data:Dict[str, str], seperator="."):
+
+def deep_update(mapping: dict, *updating_mappings: dict) -> dict:
+    """Recursively update a dict. If a value is None, the key is removed."""
+    updated_mapping = mapping.copy()
+    for updating_mapping in updating_mappings:
+        for k, v in updating_mapping.items():
+            if v is None:
+                updated_mapping.pop(k, None)
+            elif k in updated_mapping and isinstance(updated_mapping[k], dict) and isinstance(v, dict):
+                updated_mapping[k] = deep_update(updated_mapping[k], v)
+            else:
+                updated_mapping[k] = v
+    return updated_mapping
+
+
+def partition_object(data:Dict[str, Any], seperator="."):
     new = {}
     for key in data:
         if seperator in key:

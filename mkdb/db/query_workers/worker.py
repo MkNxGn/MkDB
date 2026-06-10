@@ -138,24 +138,42 @@ def _read(store_name: str, params: dict, cache: _WorkerCache, base_path: str) ->
     if cached is not None:
         return cached
 
-    # TODO(WS-1): seek by byte offset from IndexManager / LogManager
-    # from mkdb.db.storage.index_manager import IndexManager
-    # from mkdb.db.storage.log_manager import LogManager
-    # idx  = IndexManager(base_path, store_name); idx.load()
-    # lmgr = LogManager(base_path, store_name)
-    # seg, offset, size = idx.get(record_id)
-    # raw = lmgr.read(seg, offset, size)
-    # result = _parse_flat_line(raw)
-    # cache.set(record_id, result)
-    # return result
-    raise NotImplementedError("Storage layer (WS-1) not yet implemented")
+    # Basic bootstrap for worker storage access
+    from mkdb.db.storage.index_manager import IndexManager
+    from mkdb.db.storage.log_manager import LogManager
+    from mkdb.db.storage.serializer import deserialize_record
+
+    # Lazy-init or use cached managers to avoid reloading index on every seek
+    # Note: In a production environment, we'd use a more formal Context object.
+    if not hasattr(_read, "_managers"):
+        # We don't have the full config here, so we use a large dummy threshold 
+        # for LogManager since we are only reading (never writing from workers).
+        idx = IndexManager(base_path, store_name)
+        lmgr = LogManager(base_path, store_name, 10 ** 9) 
+        _read._managers = (idx, lmgr)
+    else:
+        idx, lmgr = _read._managers
+
+    entry = idx.get(record_id)
+    if entry is None:
+        return None
+    
+    seg, offset, size = entry
+    raw = lmgr.read(seg, offset, size)
+    _, flat_dict = deserialize_record(raw)
+    
+    result = {"_id": record_id, **flat_dict}
+    cache.set(record_id, result)
+    return result
 
 
 def _multi_read(store_name: str, params: dict, cache: _WorkerCache, base_path: str) -> dict:
     record_ids = params.get("record_ids", [])
     results = {}
     for rid in record_ids:
-        results[rid] = _read(store_name, {"record_id": rid}, cache, base_path)
+        res = _read(store_name, {"record_id": rid}, cache, base_path)
+        if res:
+            results[rid] = res
     return results
 
 
@@ -167,18 +185,46 @@ def _exists(store_name: str, params: dict, cache: _WorkerCache, base_path: str) 
     if cache.get(record_id) is not None:
         return True
 
-    # TODO(WS-1): check IndexManager._map
-    raise NotImplementedError("Storage layer (WS-1) not yet implemented")
+    from mkdb.db.storage.index_manager import IndexManager
+    if not hasattr(_read, "_managers"):
+        idx = IndexManager(base_path, store_name)
+    else:
+        idx = _read._managers[0]
+        
+    return idx.get(record_id) is not None
 
 
-def _query(store_name: str, params: dict, cache: _WorkerCache, base_path: str) -> list:
-    # TODO(WS-3): route params["filter"] through QueryEngine
-    raise NotImplementedError("Query engine (WS-3) not yet implemented")
+def _query(store_name: str, params: dict, cache: _WorkerCache, base_path: str) -> dict:
+    """Execute query and return result dict {ids, count, total_matches}."""
+    # We need a QueryEngine to resolve this. 
+    # QueryEngine requires a Store-like object.
+    from mkdb.db.query.query_engine import QueryEngine
+    
+    if not hasattr(_query, "_engine"):
+        # Create a lightweight proxy for the store
+        class WorkerStoreProxy:
+            def __init__(self, name, path, config_dict):
+                from mkdb.db.storage.index_manager import IndexManager
+                from mkdb.db.storage.log_manager import LogManager
+                from mkdb.config.db import store_config
+                self.config = store_config(config_dict)
+                self.store_path = path 
+                self.index_manager = IndexManager(path, name)
+                self.log_manager = LogManager(path, name, 10**9)
+            def read(self, rid):
+                return _read(store_name, {"record_id": rid}, cache, base_path)
+        
+        config_dict = getattr(_worker_loop, "store_config", {})
+        proxy = WorkerStoreProxy(store_name, base_path, config_dict)
+        _query._engine = QueryEngine(proxy)
+        _query._engine.build_indexes()
+        
+    return _query._engine.query(params)
 
 
 def _count(store_name: str, params: dict, cache: _WorkerCache, base_path: str) -> int:
-    # TODO(WS-3): route params["filter"] through QueryEngine, return len
-    raise NotImplementedError("Query engine (WS-3) not yet implemented")
+    res = _query(store_name, params, cache, base_path)
+    return res.get("total_matches", 0)
 
 
 # ---------------------------------------------------------------------------
@@ -195,19 +241,41 @@ def _worker_loop(
     cache_max_size:     int,
     cache_ttl:          float,
     stop_event,         # multiprocessing.Event or threading.Event
+    store_config_dict:  dict = {},
 ) -> None:
     log = logging.getLogger(f"QueryWorker[{store_name}#{worker_id}]")
     log.info("Worker started (pid=%s)", os.getpid())
 
     cache = _WorkerCache(cache_max_size, cache_ttl)
 
+    # Store config for use by _resolve (e.g. QueryEngine bridge)
+    _worker_loop.store_config = store_config_dict
+
     while not stop_event.is_set():
         # 1. Drain the private invalidation queue to keep cache consistent
         #    with writes that the dispatcher has broadcast.
         try:
             while True:
-                record_id = invalidation_queue.get_nowait()
-                cache.delete(record_id)
+                msg = invalidation_queue.get_nowait()
+                rid = None
+                meta = None
+                
+                if isinstance(msg, dict):
+                    rid = msg.get("id")
+                    meta = msg.get("meta")
+                else:
+                    rid = msg # Legacy support
+
+                if rid:
+                    cache.delete(rid)
+                    # Update local IndexManager views if they exist to prevent drift
+                    # from the main process's disk state.
+                    if hasattr(_read, "_managers"):
+                        idx = _read._managers[0]
+                        if meta:
+                            idx._map[rid] = meta
+                        else:
+                            idx._map.pop(rid, None)
         except Exception:
             pass  # queue.Empty or similar — expected
 
@@ -259,6 +327,7 @@ def worker_process_main(
     cache_max_size:     int,
     cache_ttl:          float,
     stop_event,
+    store_config_dict:  dict = {},
 ) -> None:
     """Entry point for multiprocessing.Process workers."""
     # Ensure the project is importable inside the child process
@@ -270,6 +339,7 @@ def worker_process_main(
         worker_id, store_name, base_path,
         work_queue, results_queue, invalidation_queue,
         cache_max_size, cache_ttl, stop_event,
+        store_config_dict
     )
 
 
@@ -283,10 +353,12 @@ def worker_thread_main(
     cache_max_size:     int,
     cache_ttl:          float,
     stop_event,
+    store_config_dict:  dict = {},
 ) -> None:
     """Entry point for threading.Thread workers (parallel_enabled=False)."""
     _worker_loop(
         worker_id, store_name, base_path,
         work_queue, results_queue, invalidation_queue,
         cache_max_size, cache_ttl, stop_event,
+        store_config_dict
     )

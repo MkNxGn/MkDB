@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MkDB JS Example</title>
+    <script src="mkdb-client.js"></script>
+</head>
+
+<body>
+    <h1>MkDB Browser Client</h1>
+    <p>Open the console to see the results.</p>
+
+    <script>
+        const { MkDBClient, Q } = MkDB;
+
+        async function run() {
+            const client = new MkDBClient({
+                host: '127.0.0.1',
+                port: 80,
+                username: 'admin',
+                password: 'password123',
+                trackRecords: true
+            });
+
+            console.log("Pinging server...");
+            const healthy = await client.ping();
+            console.log("Healthy:", healthy);
+
+            if (healthy) {
+                console.log("Listing stores...");
+                const stores = await client.listStores();
+                console.log("Stores:", stores);
+
+                console.log("Writing record...");
+                await client.set('test_store', 'web_user', {
+                    name: 'Web User',
+                    visits: 1
+                });
+
+                console.log("Reading and patching...");
+                const { data: user } = await client.get('test_store', 'web_user');
+                user.visits += 1;
+                await user.patch();
+                console.log("Patched visits:", user.visits);
+            }
+        }
+
+        run().catch(console.error);
+    </script>
+</body>
+
+</html>

@@ -14,7 +14,10 @@ before each query and at each explicit save() call.
 """
 
 import bisect
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 class NumericIndex:
@@ -37,7 +40,10 @@ class NumericIndex:
 
     def load(self) -> None:
         if not os.path.exists(self.path):
+            logger.debug("NumericIndex file %s does not exist.", self.path)
             return
+        
+        count = 0
         with open(self.path, "r", encoding="utf-8") as fh:
             for raw in fh:
                 line = raw.strip()
@@ -50,7 +56,9 @@ class NumericIndex:
                     continue
                 ids = set(ids_str.split(",")) if ids_str else set()
                 self._map[val] = ids
+                count += len(ids)
         self._values = sorted(self._map.keys())
+        logger.info("Loaded %d unique numeric values (%d record refs) from %s", len(self._map), count, self.path)
         self._apply_threshold()
 
     def save(self) -> None:

@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 from mkdb.db import mkdb
 from mkdb.config.db import store_config as _store_config
@@ -41,6 +42,7 @@ class store:
                 store_name=self.config.name,
                 base_path=self.store_path,
                 config=self.config.query_worker_config,
+                store_config=self.config
             )
             self._dispatcher.start()
         return self._dispatcher
@@ -96,10 +98,10 @@ class store:
             # Capture the active segment before write so we can detect rollover
             seg_before = self.log_manager.active_segment if self.log_manager else None
             # Call the low-level write (defined by WS-1); it writes to log + index
-            self._write_to_storage(rid, delta)
+            meta = self._write_to_storage(rid, delta)
             if self.query_engine is not None:
                 self.query_engine.on_write(rid, delta)
-            self.invalidate_cache(rid)
+            self.invalidate_cache(rid, metadata=meta)
             # On segment rollover: seal the old segment with parity + flush indexes
             if self.log_manager and seg_before is not None and self.log_manager.active_segment != seg_before:
                 if self.query_engine is not None:
@@ -149,13 +151,13 @@ class store:
         """
         return self.dispatcher.submit(operation, params, timeout=timeout)
 
-    def invalidate_cache(self, record_id: str) -> None:
+    def invalidate_cache(self, record_id: str, metadata: Any = None) -> None:
         """
         Broadcast a cache-invalidation for record_id to all query workers.
         Called by the write queue after a record is flushed to disk.
         """
         if self._dispatcher is not None:
-            self._dispatcher.invalidate(record_id)
+            self._dispatcher.invalidate(record_id, metadata=metadata)
 
     def stop(self) -> None:
         """Gracefully stop the query worker pool for this store."""
@@ -197,35 +199,71 @@ class store:
                     "Enable auto_expand in the store's entity config, or increase token_length."
                 )
 
-    def write(self, record_id: str, flat_dict: dict) -> None:
-        """Write a record — updates cache immediately, flushes to disk via queue."""
+    def write(self, record_id: str, delta: dict) -> None:
+        """
+        Write a delta update for a record. Updates cache immediately by merging, 
+        flushes to disk via the write queue.
+        """
+        # Ensure we have the current state merged in cache to support future reads
         if self._ram_cache is not None:
-            self._ram_cache.apply_delta(record_id, flat_dict)
+            nested = getattr(self.config, "nested_queries_enabled", False)
+            self._ram_cache.apply_delta(record_id, delta, nested_enabled=nested)
+        
         if self._write_queue is not None:
             self._write_queue.enqueue({
                 "op":        "write",
                 "store":     self.config.name,
                 "record_id": record_id,
-                "delta":     flat_dict,
+                "delta":     delta,
                 "ts":        __import__("time").time(),
             })
         else:
             # Fallback: direct write if queue not initialised
-            self._write_to_storage(record_id, flat_dict)
+            self._write_to_storage(record_id, delta)
 
-    def _write_to_storage(self, record_id: str, flat_dict: dict) -> None:
-        """Write directly to log + index (bypasses cache and queue)."""
+    def _write_to_storage(self, record_id: str, delta: dict) -> None:
+        """
+        Lowest-level write. Reads existing record from disk, applies delta, 
+        and appends the new version to the log.
+        """
         if self.log_manager is None or self.index_manager is None:
             raise RuntimeError("Store is not set up. Call setup() first.")
+        
+        # 1. Fetch existing data from disk (bypass cache to get actual storage state)
+        # Note: we use our existing read() logic but we strip out the cache check for safety
+        existing_data = {}
+        entry = self.index_manager.get(record_id)
+        if entry:
+            seg, offset, size = entry
+            from mkdb.db.storage import serializer as _serializer
+            try:
+                line_str = self.log_manager.read(seg, offset, size)
+                _, existing_data = _serializer.deserialize_record(line_str)
+            except Exception:
+                existing_data = {}
+
+        # 2. Merge delta (with optional deep nesting support)
+        from mkdb.objects import partition_object, deep_update
+        nested_enabled = getattr(self.config, "nested_queries_enabled", False)
+        if nested_enabled:
+            full_record = deep_update(existing_data, partition_object(delta))
+        else:
+            full_record = {**existing_data, **delta}
+
+        # 3. Serialize and append
         blob_threshold = getattr(self.config.file_config, "blob_threshold", 5 * 1024 * 1024)
         from mkdb.db.storage import serializer as _serializer
         from mkdb.db.storage import blob_store
-        line_str = _serializer.serialize_record(record_id, flat_dict)
+        
+        line_str = _serializer.serialize_record(record_id, full_record)
         if len(line_str.encode("utf-8")) > blob_threshold:
             seg, offset, size = blob_store.write_blob(self.store_path, record_id, line_str)
         else:
             seg, offset, size = self.log_manager.append(record_id, line_str)
+        
+        # 4. Update index to point to the new full version
         self.index_manager.set(record_id, seg, offset, size)
+        return (seg, offset, size)
 
     def read(self, record_id: str) -> dict | None:
         """Read a record — checks RAM cache first, falls back to disk."""
@@ -261,6 +299,8 @@ class store:
             old = self._ram_cache.get(record_id) if self._ram_cache else None
             if old:
                 self.query_engine.on_delete(record_id, old)
+        
+        self.invalidate_cache(record_id, metadata=None) # Signal deletion to workers
 
     def teardown(self) -> None:
         """Flush and close storage handles. Called during server shutdown."""

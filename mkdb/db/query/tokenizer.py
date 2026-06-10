@@ -1,11 +1,21 @@
 """
 Text tokenizer for full-text indexing.
 
-Pipeline: lowercase → strip non-alphanumeric (keep spaces) → split on whitespace
-         → remove stop-words → apply simple suffix-stripping stemmer.
+Pipeline:
+  1. Lowercase
+  2. Split on whitespace / newlines only
+  3. Strip leading/trailing punctuation from each token
+     (dots between non-space characters are preserved — "ecommerce.product"
+      stays as one token; "product. " loses the trailing dot)
+  4. Drop stop-words and single-character tokens
+
+No stemming — tokens are stored and matched as-is so that dotted namespaces
+like "ecommerce.product" round-trip exactly.
 """
 
-import re
+# Characters stripped from the start/end of each raw token.
+# Internal dots (xxx.yyy) are intentionally NOT in this set.
+_STRIP_CHARS = ".,!?;:\"'()[]{}<>@#$%^&*+-=/\\|~`_"
 
 STOP_WORDS = {
     "the", "is", "a", "and", "for", "in", "to", "of",
@@ -14,35 +24,31 @@ STOP_WORDS = {
 }
 
 
-def _stem(word: str) -> str:
-    """
-    Minimal suffix-stripping stemmer (no NLTK dependency).
-    Applies the most common English suffix rules in order.
-    """
-    if len(word) <= 3:
-        return word
-    for suffix, replacement in [
-        ("ational", "ate"), ("tional", "tion"), ("enci", "ence"),
-        ("anci", "ance"), ("izer", "ize"), ("ising", "ise"),
-        ("izing", "ize"), ("ness", ""), ("ment", ""), ("ful", ""),
-        ("less", ""), ("ings", "ing"), ("ing", ""), ("edly", ""),
-        ("edly", "ed"), ("edly", ""), ("ed", ""), ("er", ""),
-        ("ly", ""), ("ies", "i"), ("ied", "i"), ("es", "e"),
-        ("s", ""),
-    ]:
-        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
-            return word[: -len(suffix)] + replacement
-    return word
-
-
 def tokenize(text: str) -> list:
     """
-    Tokenize text into a list of stems.
-    Returns an empty list for empty/None input.
+    Tokenize *text* and return a list of lowercase tokens.
+
+    Rules
+    -----
+    * Split on any whitespace/newline.
+    * Strip leading/trailing punctuation (not dots embedded inside a word).
+    * Drop stop-words and single-character tokens.
+    * No stemming — tokens are returned verbatim (lowercased).
+
+    Examples
+    --------
+    >>> tokenize("ecommerce.product")
+    ['ecommerce.product']
+    >>> tokenize("Hello, world.")
+    ['hello', 'world']
+    >>> tokenize("Mr. Smith")
+    ['mr', 'smith']
     """
     if not text:
         return []
-    lowered = text.lower()
-    cleaned = re.sub(r"[^a-z0-9\s]", " ", lowered)
-    words = cleaned.split()
-    return [_stem(w) for w in words if w not in STOP_WORDS and len(w) > 1]
+    tokens = []
+    for raw in text.lower().split():
+        word = raw.strip(_STRIP_CHARS)
+        if word and word not in STOP_WORDS and len(word) > 1:
+            tokens.append(word)
+    return tokens

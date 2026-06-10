@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyMkDB"
-version = "0.1.6"
+version = "0.1.14"
 description = "A log-structured, partitioned NoSQL database engine with full-text search, numeric indexes, and dual TCP/HTTP protocols."
 readme = "README.md"
 license = { text = "MIT" }
@@ -40,4 +40,4 @@ Repository = "https://github.com/MNG/MkDB"
 include = ["mkdb*"]
 
 [tool.setuptools.package-data]
-mkdb = ["server/control/files/*.html"]
+mkdb = ["server/control/files/*.html", "server/assets/*.js"]

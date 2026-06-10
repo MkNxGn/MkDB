@@ -52,13 +52,14 @@ def execute(
     Parameters
     ----------
     database      : active mkdb database instance
-    action        : "ping" | "read" | "write" | "delete" | "query"
-    store_name    : target store name (empty string valid only for "ping")
+    action        : "ping" | "read" | "write" | "delete" | "query" | "list_stores"
+    store_name    : target store name (empty string valid for "ping", "list_stores")
     params        : action-specific values —
                       read   → record_id (str)
                       write  → record_id (str, optional), delta (dict), bytes_in (int, optional)
                       delete → record_id (str)
                       query  → filter (dict), hydrate (bool)
+                      list_stores → (none)
     client_key    : username or IP, forwarded to metrics
     transport     : "http" | "socket", forwarded to metrics
     on_broadcast  : optional callback(store_name, event_dict) for pub-sub (used by socket)
@@ -69,7 +70,20 @@ def execute(
     if action == "ping":
         return ActionResult(ok=True, data="pong")
 
-    # All non-ping actions require a named store.
+    if action == "list_stores":
+        # Returns a list of store names and basic info
+        stores_info = []
+        for name, store_obj in database.stores.items():
+            count = 0
+            if store_obj.index_manager is not None:
+                count = len(store_obj.index_manager._map)
+            stores_info.append({
+                "name": name,
+                "record_count": count
+            })
+        return ActionResult(ok=True, data=stores_info)
+
+    # All other actions require a named store.
     if not store_name:
         return ActionResult(ok=False, error="'store' is required", http_code=400)
     store_obj = database.stores.get(store_name)
@@ -165,32 +179,38 @@ def _do_delete(store_obj, store_name: str, params: dict, client_key: str, transp
 
 
 def _do_query(store_obj, store_name: str, params: dict, client_key: str, transport: str) -> ActionResult:
-    filter_dict = params.get("filter", {})
-    hydrate     = bool(params.get("hydrate", False))
-
-    if not isinstance(filter_dict, dict):
-        return ActionResult(ok=False, error="'filter' must be a JSON object", http_code=400)
-
-    qe = getattr(store_obj, "query_engine", None)
-    if qe is None:
-        return ActionResult(ok=False, error=f"Store '{store_name}' has no query engine", http_code=500)
+    hydrate = bool(params.get("hydrate", False))
 
     t0 = time.monotonic()
-    ids = qe.query(filter_dict)
-    duration_ms = (time.monotonic() - t0) * 1000.0
+    try:
+        # Use the query worker pool for parallel execution
+        query_result = store_obj.query("query", params)
+        duration_ms = (time.monotonic() - t0) * 1000.0
+    except Exception as exc:
+        _metrics.record(store_name, "error", client_key, transport=transport,
+                        error_msg=f"Query failed: {exc}")
+        return ActionResult(ok=False, error=str(exc), http_code=500)
+
+    ids = query_result.get("ids", [])
+    total_matches = query_result.get("total_matches", len(ids))
 
     if hydrate:
         records = [store_obj.read(rid) for rid in ids]
-        result  = {"count": len(records), "records": records}
+        records = [r for r in records if r is not None]  # drop deleted/missing
+        result  = {"count": len(records), "total_matches": total_matches, "records": records}
     else:
-        result  = {"count": len(ids), "ids": ids}
+        result  = {"count": len(ids), "total_matches": total_matches, "ids": ids}
 
-    bytes_out = len(json.dumps(result).encode())
+    try:
+        bytes_out = len(json.dumps(result).encode())
+    except (TypeError, ValueError):
+        bytes_out = 0
     _metrics.record(store_name, "query", client_key, bytes_out=bytes_out, transport=transport)
 
     # Slow query detection
     threshold_ms = getattr(getattr(store_obj, "config", None), "slow_query_threshold_ms", 0.0)
     if threshold_ms > 0 and duration_ms >= threshold_ms:
+        filter_dict = params.get("filter", {})
         _metrics.record_slow_query(
             store_name, duration_ms, filter_dict,
             result.get("count", 0), client_key, transport,

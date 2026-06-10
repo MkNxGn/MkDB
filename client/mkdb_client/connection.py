@@ -6,16 +6,47 @@ Mirrors src/server/coms/socket_protocol.py (client-side copy).
 """
 
 import json
+import logging
 import socket
 import struct
 import threading
+import time
 import uuid
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict, Any
 
 from .exceptions import MkDBAuthError, MkDBConnectionError, MkDBTimeoutError
 
+logger = logging.getLogger(__name__)
 
 MAX_FRAME = 10 * 1024 * 1024   # 10 MB
+RECONNECT_INTERVAL = 10.0       # seconds between reconnect attempts
+
+
+class MkDBTask:
+    """A 'Future'-like object for tracking an asynchronous request."""
+    def __init__(self, correlation_id: str, timeout: float):
+        self.id = correlation_id
+        self.timeout = timeout
+        self.created_at = time.time()
+        
+        self.receipt_event = threading.Event()
+        self.response_event = threading.Event()
+        
+        self.response = None
+        self.error = None
+
+    def wait_for_receipt(self, timeout: Optional[float] = None) -> bool:
+        """Wait for the server to acknowledge receipt of the message."""
+        return self.receipt_event.wait(timeout or 1.0) # Default fast ACK
+
+    def result(self, timeout: Optional[float] = None) -> Any:
+        """Wait for and return the final response data."""
+        t = timeout or self.timeout
+        if not self.response_event.wait(t):
+            raise MkDBTimeoutError(f"Request {self.id} timed out after {t}s")
+        if self.error:
+            raise MkDBConnectionError(self.error)
+        return self.response
 
 
 def _recv_exact(sock: socket.socket, n: int) -> bytes:
@@ -29,12 +60,18 @@ def _recv_exact(sock: socket.socket, n: int) -> bytes:
 
 
 def _encode(payload: dict) -> bytes:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    body = json.dumps(payload, ensure_ascii=False, default=_json_default).encode("utf-8")
     return struct.pack(">I", len(body)) + body
 
 
 def _decode(data: bytes) -> dict:
     return json.loads(data.decode("utf-8"))
+
+
+def _json_default(obj):
+    if isinstance(obj, set):
+        return list(obj)
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 
 class Connection:
@@ -43,6 +80,10 @@ class Connection:
 
     Outbound: _send() serialises and writes to socket.
     Inbound:  background _reader_loop() dispatches to registered handlers.
+
+    Automatically reconnects after a disconnection (checked every
+    RECONNECT_INTERVAL seconds).  Active store subscriptions are
+    re-registered after each successful reconnect.
     """
 
     def __init__(self, host: str = "127.0.0.1", port: int = 9001,
@@ -58,10 +99,13 @@ class Connection:
         self._password    = password
         self._sock: Optional[socket.socket] = None
         self._lock        = threading.Lock()
-        self._pending: dict[str, threading.Event] = {}     # correlation_id -> Event
-        self._results: dict[str, dict] = {}                # correlation_id -> response dict
-        self._push_handlers: list[Callable[[dict], None]] = []   # for server-push events
-        self._running  = False
+        self._write_lock  = threading.Lock()
+        self._pending: dict[str, MkDBTask] = {}            # correlation_id -> Task
+        self._push_handlers: list[Callable[[dict], None]] = []
+        self._subscriptions: set[str] = set()              # stores with active subscriptions
+        self._running          = False   # False → intentional close, stop watchdog
+        self._reconnect_lock   = threading.Lock()
+        self.last_receive_at   = 0.0
         self.can_read  = False
         self.can_write = False
 
@@ -70,6 +114,16 @@ class Connection:
     # ------------------------------------------------------------------
 
     def connect(self) -> None:
+        """Connect and start the background reader + watchdog threads."""
+        self._running = True
+        self._connect_socket()
+        watchdog = threading.Thread(
+            target=self._watchdog_loop, daemon=True, name="MkDB-SDK-watchdog"
+        )
+        watchdog.start()
+
+    def _connect_socket(self) -> None:
+        """Open a fresh TCP socket, run the handshake, start a reader thread."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(self.recv_timeout)
         sock.connect((self.host, self.port))
@@ -83,7 +137,6 @@ class Connection:
         read_protected  = perm.get("read_protected", False)
         write_protected = perm.get("write_protected", False)
 
-        # Declare desired access level
         self._handshake_send(sock, {"access": self._access})
 
         need_auth = (
@@ -121,8 +174,7 @@ class Connection:
             self.can_read  = ready.get("can_read",  True)
             self.can_write = ready.get("can_write", False)
 
-        self._sock    = sock
-        self._running = True
+        self._sock = sock
         reader = threading.Thread(
             target=self._reader_loop, daemon=True, name="MkDB-SDK-reader"
         )
@@ -140,48 +192,90 @@ class Connection:
         return json.loads(_recv_exact(sock, length).decode("utf-8"))
 
     def close(self) -> None:
+        """Permanently close the connection. Disables automatic reconnect."""
         self._running = False
-        if self._sock:
+        sock, self._sock = self._sock, None
+        if sock:
             try:
-                self._sock.close()
+                sock.close()
             except Exception:
                 pass
-        self._sock = None
+        # Wake any pending requests so they don't hang
+        with self._lock:
+            for event in self._pending.values():
+                event.set()
 
     # ------------------------------------------------------------------
     # Send / receive
     # ------------------------------------------------------------------
 
-    def send(self, payload: dict) -> dict:
+    def send(self, payload: dict, _retry: bool = True) -> dict:
         """
         Send a request and block until the matching response arrives.
-        Returns the response dict.
+        Includes a fast 1s timeout for the 'receipt' ACK to detect dead lines.
         """
-        correlation_id = str(uuid.uuid4())
+        task = self.send_async(payload, _retry=_retry)
+        
+        # 1. Wait for receipt (confirms server got it)
+        if not task.wait_for_receipt(timeout=1.0):
+            # If server didn't even ACK, the connection might be dead
+            if _retry and self._running:
+                logger.warning("No receipt for %s, trying reconnect", task.id)
+                self._try_reconnect()
+                payload.pop("id", None)
+                return self.send(payload, _retry=False)
+            raise MkDBConnectionError("Server failed to acknowledge request")
+
+        # 2. Wait for final result
+        return task.result()
+
+    def send_async(self, payload: dict, _retry: bool = True) -> MkDBTask:
+        """
+        Send a request and return a Task object immediately.
+        """
+        if self._sock is None:
+            if _retry and self._running:
+                self._try_reconnect()
+            if self._sock is None:
+                raise MkDBConnectionError("Not connected to MkDB server")
+
+        correlation_id = payload.get("id") or str(uuid.uuid4())
         payload["id"] = correlation_id
         payload.setdefault("type", "request")
 
-        event = threading.Event()
+        task = MkDBTask(correlation_id, self.recv_timeout)
         with self._lock:
-            self._pending[correlation_id] = event
+            self._pending[correlation_id] = task
 
         frame = _encode(payload)
-        with self._lock:
-            self._sock.sendall(frame)
+        try:
+            with self._write_lock:
+                if self._sock is None:
+                    raise MkDBConnectionError("Not connected to MkDB server")
+                self._sock.sendall(frame)
+        except Exception as exc:
+            with self._lock:
+                self._pending.pop(correlation_id, None)
+            if _retry and self._running:
+                self._try_reconnect()
+                return self.send_async(payload, _retry=False)
+            raise MkDBConnectionError(f"Send failed: {exc}") from exc
 
-        event.wait(timeout=self.recv_timeout)
-        with self._lock:
-            result = self._results.pop(correlation_id, None)
-            self._pending.pop(correlation_id, None)
-        if result is None:
-            raise MkDBTimeoutError("No response received within timeout")
-        return result
+        return task
 
     def send_raw(self, payload: dict) -> None:
-        """Fire-and-forget (used for subscribe)."""
+        """Fire-and-forget (used for subscribe). Tracks subscriptions for reconnect."""
+        if payload.get("type") == "subscribe":
+            store = payload.get("store")
+            if store:
+                self._subscriptions.add(store)
+
+        if self._sock is None:
+            return   # will be re-sent by watchdog after reconnect
         frame = _encode(payload)
-        with self._lock:
-            self._sock.sendall(frame)
+        with self._write_lock:
+            if self._sock:
+                self._sock.sendall(frame)
 
     def register_push_handler(self, handler: Callable[[dict], None]) -> None:
         """Register a callback for server-push (ping, update, subscribed, disconnect)."""
@@ -200,28 +294,100 @@ class Connection:
                     break   # protocol violation — disconnect
                 payload_bytes = _recv_exact(self._sock, length)
                 msg = _decode(payload_bytes)
+                self.last_receive_at = time.time()
             except Exception:
                 break
 
             msg_type = msg.get("type")
             correlation_id = msg.get("id")
 
-            if msg_type == "response" and correlation_id:
+            if correlation_id:
                 with self._lock:
-                    event = self._pending.get(correlation_id)
-                    if event:
-                        self._results[correlation_id] = msg
-                        event.set()
-            elif msg_type == "ping":
-                # Respond with pong
+                    task = self._pending.get(correlation_id)
+                
+                if task:
+                    if msg_type == "receipt":
+                        task.receipt_event.set()
+                    elif msg_type == "response":
+                        task.response = msg
+                        task.receipt_event.set() # Also set receipt if we skipped it
+                        task.response_event.set()
+                        with self._lock:
+                            self._pending.pop(correlation_id, None)
+            
+            if msg_type == "ping":
                 try:
-                    self._sock.sendall(_encode({"type": "pong"}))
+                    with self._write_lock:
+                        if self._sock:
+                            self._sock.sendall(_encode({"type": "pong"}))
                 except Exception:
                     break
-            else:
-                # Server-push: dispatch to registered handlers
+            elif msg_type not in ("receipt", "response"):
+                # Broadcast or other push message
                 for handler in self._push_handlers:
                     try:
                         handler(msg)
                     except Exception:
                         pass
+
+        # Reader exiting — clean up socket reference
+        old_sock, self._sock = self._sock, None
+        if old_sock:
+            try:
+                old_sock.close()
+            except Exception:
+                pass
+
+        # Wake all pending requests so they fail fast instead of hanging
+        with self._lock:
+            for task in self._pending.values():
+                task.error = "Connection closed"
+                task.receipt_event.set()
+                task.response_event.set()
+            self._pending.clear()
+
+    # ------------------------------------------------------------------
+    # Watchdog / auto-reconnect
+    # ------------------------------------------------------------------
+
+    def _watchdog_loop(self) -> None:
+        """Check every RECONNECT_INTERVAL seconds and reconnect if dropped."""
+        while self._running:
+            time.sleep(RECONNECT_INTERVAL)
+            if not self._running:
+                break
+            
+            # Dead-line detection: if we haven't heard anything in 2x timeout, force close
+            if self._sock and self.last_receive_at > 0:
+                if time.time() - self.last_receive_at > (self.recv_timeout * 2):
+                    logger.warning("MkDB: connection timed out (no data for %ds), forcing reconnect", 
+                                   time.time() - self.last_receive_at)
+                    try:
+                        self._sock.close()
+                    except:
+                        pass
+                    self._sock = None
+
+            if self._sock is None:
+                self._try_reconnect()
+
+    def _try_reconnect(self) -> None:
+        with self._reconnect_lock:
+            if self._sock is not None or not self._running:
+                return   # already reconnected or intentionally closed
+            try:
+                logger.info("MkDB: attempting reconnect to %s:%s", self.host, self.port)
+                self._connect_socket()
+                logger.info("MkDB: reconnected successfully")
+                # Re-register store subscriptions
+                for store in list(self._subscriptions):
+                    try:
+                        frame = _encode({"type": "subscribe", "store": store})
+                        with self._write_lock:
+                            if self._sock:
+                                self._sock.sendall(frame)
+                    except Exception:
+                        pass
+            except Exception as exc:
+                logger.warning("MkDB: reconnect failed: %s", exc)
+

@@ -266,6 +266,10 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
         path  = urlparse(self.path).path.rstrip("/")
         parts = [p for p in path.split("/") if p]
 
+        # White-list the public client script
+        if path == "/mkdb-client.js":
+            return False
+
         # Extract store name and write requirement from URL (best-effort)
         store_name    = None
         require_write = False
@@ -324,6 +328,15 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
             self._handle_health()
             return
 
+        if path == "/mkdb-client.js":
+            self._handle_serve_client()
+            return
+
+        # /data
+        if path == "/data":
+            self._handle_list_stores()
+            return
+
         # /data/{store}/{id}
         parts = [p for p in path.split("/") if p]
         if len(parts) == 3 and parts[0] == "data":
@@ -368,8 +381,28 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
         if db is None:
             self._ok({"status": "no database"})
             return
-        stores = list(db.stores.keys())
-        self._ok({"status": "ok", "stores": stores, "store_count": len(stores)})
+        self._ok({"status": "ok"})
+
+    def _handle_serve_client(self) -> None:
+        """Serves the standalone mkdb-client.js file."""
+        import os
+        # Path is relative to this file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        client_path = os.path.join(current_dir, "..", "assets", "mkdb-client.js")
+        
+        if not os.path.exists(client_path):
+            self._err("Client asset not found", 404)
+            return
+
+        with open(client_path, "rb") as f:
+            content = f.read()
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Access-Control-Allow-Origin", "*") # Allow loading from any origin
+        self.end_headers()
+        self.wfile.write(content)
 
     def _resolve_client_key(self, store_name: str) -> str:
         """Return the client identifier for metrics.
@@ -390,6 +423,10 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
     def _handle_read(self, store_name: str, record_id: str) -> None:
         r = _execute(self.database, "read", store_name, {"record_id": record_id},
                      self._resolve_client_key(store_name), "http")
+        self._ok(r.data) if r.ok else self._err(r.error, r.http_code)
+
+    def _handle_list_stores(self) -> None:
+        r = _execute(self.database, "list_stores", "", {}, self._client_key, "http")
         self._ok(r.data) if r.ok else self._err(r.error, r.http_code)
 
     def _handle_write(self) -> None:
@@ -432,10 +469,7 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
         r = _execute(
             self.database, "query",
             str(data.get("store", "")).strip(),
-            {
-                "filter":  data.get("filter", {}),
-                "hydrate": bool(data.get("hydrate", False)),
-            },
+            data,
             self._resolve_client_key(str(data.get("store", "")).strip()), "http",
         )
         self._ok(r.data) if r.ok else self._err(r.error, r.http_code)

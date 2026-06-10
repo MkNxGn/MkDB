@@ -21,11 +21,18 @@ Usage:
 import hmac
 import hashlib
 import secrets
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 from .connection import Connection
 from .http_connection import HttpConnection
-from .delta import flatten
+from .query_builder import Q
+from .responses import (
+    GetResponse,
+    WriteResponse,
+    ListStoresResponse,
+    GenerateIdResponse,
+    SnapshotBaseObject,
+)
 from .exceptions import (
     MkDBServerError,
     MkDBStoreNotFoundError,
@@ -39,6 +46,7 @@ from .responses import (
     DeleteResponse,
     QueryResponse,
     GenerateIdResponse,
+    ListStoresResponse,
 )
 
 
@@ -48,7 +56,8 @@ class MkDBClient:
                  username: str = "",
                  password: str = "mk_db",
                  recv_timeout: float = 30.0,
-                 transport: str = "socket"):
+                 transport: str = "socket",
+                 track_records: bool = False):
         """
         Parameters
         ----------
@@ -59,7 +68,9 @@ class MkDBClient:
         recv_timeout    : seconds to wait for a response
         transport       : "socket" (default) or "http"
                           HTTP transport does not support pub-sub (on_update).
+        track_records   : if True, .get() returns a SnapshotBaseObject that supports .patch()
         """
+        self.track_records = track_records
         t = transport.lower()
         if t == "http":
             self._conn = HttpConnection(host=host, port=port, recv_timeout=recv_timeout,
@@ -83,7 +94,12 @@ class MkDBClient:
     # Data operations
     # ------------------------------------------------------------------
 
-    def get(self, store: str, record_id: str) -> GetResponse:
+    @property
+    def query_builder(self) -> Q:
+        """Get a new Q object for building queries."""
+        return Q()
+
+    def get(self, store: str, record_id: str, as_type: Optional[type] = None) -> GetResponse:
         """Read a record. Returns a GetResponse (check .found before using .data)."""
         resp = self._conn.send({
             "action": "read",
@@ -92,30 +108,108 @@ class MkDBClient:
         })
         self._raise_if_error(resp)
         data = resp.get("data")
-        return GetResponse(record_id=record_id, data=data, found=data is not None)
 
-    def set(self, store: str, record_id: str, delta: dict,
-            flatten_nested: bool = True) -> WriteResponse:
+        # Determine wrap type: explicitly passed, or client-level default
+        wrap_type = as_type
+        if wrap_type is None and self.track_records:
+            wrap_type = SnapshotBaseObject
+
+        obj = data
+        if data is not None and wrap_type:
+            # Create instance first
+            obj = wrap_type(data)
+            # Inject metadata directly if it's a SnapshotBaseObject (or subclass)
+            if hasattr(obj, "bind") and callable(obj.bind):
+                obj.bind(store=store, record_id=record_id, client=self)
+            elif isinstance(obj, dict):
+                # If they passed dict as the wrap_type for some reason, ignore binding
+                pass
+            else:
+                # Fallback for other objects: try direct attribute setting
+                setattr(obj, "__store__", store)
+                setattr(obj, "__id__", record_id)
+                setattr(obj, "__client__", self)
+
+        return GetResponse(record_id=record_id, data=obj, found=data is not None)
+
+    def list_stores(self) -> ListStoresResponse:
+        """List all stores on the server."""
+        resp = self._conn.send({
+            "action": "list_stores",
+            "store": ""
+        })
+        self._raise_if_error(resp)
+        return ListStoresResponse(stores=resp.get("data", []))
+
+    def get_async(self, store: str, record_id: str, as_type: Optional[type] = None):
+        """Asynchronously read a record."""
+        task = self._conn.send_async({
+            "action": "read",
+            "store":  store,
+            "record_id": record_id,
+        })
+        original_result = task.result
+        def wrapped_result(timeout=None):
+            resp = original_result(timeout)
+            self._raise_if_error(resp)
+            data = resp.get("data")
+            
+            # Determine wrap type
+            wrap_type = as_type
+            if wrap_type is None and self.track_records:
+                wrap_type = SnapshotBaseObject
+                
+            obj = data
+            if data is not None and wrap_type:
+                # Create instance first
+                obj = wrap_type(data)
+                # Inject metadata directly if it's a SnapshotBaseObject (or subclass)
+                if hasattr(obj, "bind") and callable(obj.bind):
+                    obj.bind(store=store, record_id=record_id, client=self)
+                else:
+                    setattr(obj, "__store__", store)
+                    setattr(obj, "__id__", record_id)
+                    setattr(obj, "__client__", self)
+
+            return GetResponse(record_id=record_id, data=obj, found=data is not None)
+        task.result = wrapped_result
+        return task
+
+    def set(self, store: str, record_id: str, delta: dict) -> WriteResponse:
         """Write / update a record. Returns a WriteResponse."""
-        flat = flatten(delta) if flatten_nested else delta
         resp = self._conn.send({
             "action":    "write",
             "store":     store,
             "record_id": record_id,
-            "delta":     flat,
+            "delta":     delta,
         })
         self._raise_if_error(resp)
         rid = (resp.get("data") or {}).get("record_id", record_id)
         return WriteResponse(record_id=rid, store=store)
 
-    def insert(self, store: str, delta: dict,
-               flatten_nested: bool = True) -> WriteResponse:
+    def set_async(self, store: str, record_id: str, delta: dict):
+        """Asynchronously write / update a record."""
+        task = self._conn.send_async({
+            "action":    "write",
+            "store":     store,
+            "record_id": record_id,
+            "delta":     delta,
+        })
+        original_result = task.result
+        def wrapped_result(timeout=None):
+            resp = original_result(timeout)
+            self._raise_if_error(resp)
+            rid = (resp.get("data") or {}).get("record_id", record_id)
+            return WriteResponse(record_id=rid, store=store)
+        task.result = wrapped_result
+        return task
+
+    def insert(self, store: str, delta: dict) -> WriteResponse:
         """Write a new record with a server-generated ID. Returns a WriteResponse."""
-        flat = flatten(delta) if flatten_nested else delta
         resp = self._conn.send({
             "action": "write",
             "store":  store,
-            "delta":  flat,
+            "delta":  delta,
         })
         self._raise_if_error(resp)
         rid = (resp.get("data") or {}).get("record_id", "")
@@ -141,23 +235,96 @@ class MkDBClient:
         self._raise_if_error(resp)
         return DeleteResponse(record_id=record_id, store=store)
 
-    def query(self, store: str, filter_dict: dict,
-              hydrate: bool = False) -> QueryResponse:
+    def query(self, store: str, filter_dict: Union[dict, Q],
+              hydrate: bool = False,
+              sort: Optional[str] = None,
+              limit: Optional[int] = None,
+              offset: Optional[int] = None) -> QueryResponse:
         """Query a store. Returns a QueryResponse."""
-        resp = self._conn.send({
-            "action":  "query",
-            "store":   store,
-            "filter":  filter_dict,
-            "hydrate": hydrate,
-        })
+        if isinstance(filter_dict, Q):
+            # Extract parameters from Q object
+            built = filter_dict.build()
+            payload = {
+                "action": "query",
+                "store": store,
+                "filter": built.get("filter", {}),
+                "hydrate": hydrate,
+                "sort": sort or built.get("sort"),
+                "limit": limit or built.get("limit"),
+                "offset": offset or built.get("offset")
+            }
+        else:
+            payload = {
+                "action":  "query",
+                "store":   store,
+                "filter":  filter_dict,
+                "hydrate": hydrate,
+                "sort":    sort,
+                "limit":   limit,
+                "offset":  offset,
+            }
+
+        resp = self._conn.send(payload)
         self._raise_if_error(resp)
         data = resp.get("data") or {}
+
         return QueryResponse(
             count=data.get("count", 0),
+            total_matches=data.get("total_matches", data.get("count", 0)),
             ids=data.get("ids", []),
             records=data.get("records"),
-            store=store,
+            store=store
         )
+
+    def query_async(self, store: str, filter_dict: Union[dict, Q],
+                    hydrate: bool = False,
+                    sort: Optional[str] = None,
+                    limit: Optional[int] = None,
+                    offset: Optional[int] = None):
+        """
+        Start a query asynchronously. Returns a MkDBTask object.
+        You can call .result() on the returned task to wait for the QueryResponse.
+        """
+        if isinstance(filter_dict, Q):
+            built = filter_dict.build()
+            payload = {
+                "action": "query",
+                "store": store,
+                "filter": built.get("filter", {}),
+                "hydrate": hydrate,
+                "sort": sort or built.get("sort"),
+                "limit": limit or built.get("limit"),
+                "offset": offset or built.get("offset")
+            }
+        else:
+            payload = {
+                "action":  "query",
+                "store":   store,
+                "filter":  filter_dict,
+                "hydrate": hydrate,
+                "sort":    sort,
+                "limit":   limit,
+                "offset":  offset,
+            }
+
+        task = self._conn.send_async(payload)
+        
+        # We wrap the task's result so it returns a QueryResponse instead of a raw dict
+        def wrapped_result(timeout=None):
+            resp = task.result(timeout)
+            self._raise_if_error(resp)
+            data = resp.get("data") or {}
+            
+            return QueryResponse(
+                count=data.get("count", 0),
+                total_matches=data.get("total_matches", data.get("count", 0)),
+                ids=data.get("ids", []),
+                records=data.get("records"),
+                store=store
+            )
+        
+        task.result = wrapped_result
+        return task
 
     # ------------------------------------------------------------------
     # Pub-sub

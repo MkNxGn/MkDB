@@ -6,6 +6,7 @@ Usage:
     mkdb [PATH_TO_DB] -c       Generate a default config.json in that directory
 """
 
+import logging
 import os
 import sys
 
@@ -16,6 +17,12 @@ def main():
     from mkdb.config.db import mkdb_config
     from mkdb.filing import read_json, write_json
     from mkdb.runtime import runtime_settings
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
     print(f"""{Fore.CYAN}
     ╔═══════════════════════════════════════╗

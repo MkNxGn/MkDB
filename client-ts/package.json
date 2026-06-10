@@ -1,0 +1,32 @@
+{
+    "name": "mkdb-client",
+    "version": "0.1.0",
+    "description": "TypeScript HTTP client for MkDB",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "bundle": "browserify dist/index.js --standalone MkDB -o dist/mkdb-client.js",
+        "minify": "uglifyjs dist/mkdb-client.js -c -m -o dist/mkdb-client.min.js",
+        "dist": "npm run build && npm run bundle && npm run minify",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "mkdb",
+        "database",
+        "typescript",
+        "http"
+    ],
+    "author": "MNG",
+    "license": "MIT",
+    "dependencies": {
+        "node-fetch": "^2.6.7"
+    },
+    "devDependencies": {
+        "@types/node": "^18.11.9",
+        "@types/node-fetch": "^2.6.2",
+        "typescript": "^4.9.3",
+        "browserify": "^17.0.0",
+        "uglify-js": "^3.17.4"
+    }
+}
