@@ -22,22 +22,60 @@
     }
 
     class Q {
-        constructor() {
-            this.filter = {};
+        constructor(filter = {}, sort = null, limit = null, offset = null) {
+            this._filter = filter;
+            this._sort = sort;
+            this._limit = limit;
+            this._offset = offset;
         }
-        static where(field, op, value) {
-            const q = new Q();
-            q.filter[field] = { [op]: value };
-            return q;
+        static field(name) {
+            return new FieldProxy(name);
         }
-        and(field, op, value) {
-            this.filter[field] = { [op]: value };
+        sort(fieldWithPrefix) {
+            this._sort = fieldWithPrefix;
             return this;
         }
+        limit(count) {
+            this._limit = count;
+            return this;
+        }
+        offset(count) {
+            this._offset = count;
+            return this;
+        }
+        and(other) {
+            return new Q({ "$and": [this._filter, other._filter] });
+        }
+        or(other) {
+            return new Q({ "$or": [this._filter, other._filter] });
+        }
+        static where(field, op, value) {
+            const f = {};
+            f[field] = { [op]: value };
+            return new Q(f);
+        }
         build() {
-            return this.filter;
+            const q = { filter: this._filter };
+            if (this._sort !== null) q.sort = this._sort;
+            if (this._limit !== null) q.limit = this._limit;
+            if (this._offset !== null) q.offset = this._offset;
+            return q;
         }
     }
+
+    class FieldProxy {
+        constructor(name) {
+            this._name = name;
+        }
+        eq(val) { return new Q({ [this._name]: { "eq": val } }); }
+        neq(val) { return new Q({ [this._name]: { "neq": val } }); }
+        gt(val) { return new Q({ [this._name]: { "gt": val } }); }
+        gte(val) { return new Q({ [this._name]: { "gte": val } }); }
+        lt(val) { return new Q({ [this._name]: { "lt": val } }); }
+        lte(val) { return new Q({ [this._name]: { "lte": val } }); }
+        contains(val) { return new Q({ [this._name]: { "contains": val } }); }
+        in(vals) { return new Q({ [this._name]: { "in": vals } }); }
+        exists(val = true) { return new Q({ [this._name]: { "exists": val } }); }
 
     class MkDBClient {
         constructor(config = {}) {
@@ -126,8 +164,14 @@
             return { record_id: recordId, store };
         }
 
-        async query(store, filter = {}, hydrate = true) {
-            return await this.request("POST", "/query", { store, filter, hydrate });
+        async query(store, queryInput = {}, hydrate = true) {
+            let payload = { store, hydrate };
+            if (queryInput && typeof queryInput.build === 'function') {
+                Object.assign(payload, queryInput.build());
+            } else {
+                payload.filter = queryInput;
+            }
+            return await this.request("POST", "/query", payload);
         }
 
         async listStores() {

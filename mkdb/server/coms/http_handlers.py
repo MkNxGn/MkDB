@@ -384,8 +384,9 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
         self._ok({"status": "ok"})
 
     def _handle_serve_client(self) -> None:
-        """Serves the standalone mkdb-client.js file."""
+        """Serves the standalone mkdb-client.js file with basic caching."""
         import os
+        import hashlib
         # Path is relative to this file
         current_dir = os.path.dirname(os.path.abspath(__file__))
         client_path = os.path.join(current_dir, "..", "assets", "mkdb-client.js")
@@ -397,10 +398,21 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
         with open(client_path, "rb") as f:
             content = f.read()
 
+        # Generate ETag based on file content
+        etag = f'"{hashlib.md5(content).hexdigest()}"'
+        
+        # Check If-None-Match header for 304 Not Modified
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.end_headers()
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "application/javascript; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
-        self.send_header("Access-Control-Allow-Origin", "*") # Allow loading from any origin
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "public, max-age=3600") # Cache for 1 hour
         self.end_headers()
         self.wfile.write(content)
 

@@ -135,13 +135,21 @@ export class MkDBClient {
      */
     async query(
         store: string,
-        filter: any = {},
+        query: any = {},
         hydrate: boolean = true
     ): Promise<QueryResponse> {
-        return await this.request<QueryResponse>("query", store, {
-            filter,
-            hydrate
-        });
+        let payload: any = { hydrate };
+
+        // If it's a Q object (has .build() method)
+        if (query && typeof query.build === 'function') {
+            const built = query.build();
+            Object.assign(payload, built);
+        } else {
+            // Traditional filter-only passing
+            payload.filter = query;
+        }
+
+        return await this.request<QueryResponse>("query", store, payload);
     }
 
     /**
