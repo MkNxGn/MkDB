@@ -47,6 +47,22 @@ results = client.query("products", query)
 print(f"Showing {results.count} of {results.total_matches} matches")
 ```
 
+## JavaScript / TypeScript Query Builder (Q)
+The JavaScript and TypeScript clients use a similar fluent syntax, using `.and()` and `.or()` methods instead of operators.
+
+```javascript
+import { Q } from 'mkdb-client';
+
+const query = Q.field("status").eq("active")
+    .and(Q.field("price").lt(50))
+    .sort("-price")
+    .limit(10);
+
+const results = await client.query("products", query);
+```
+
+See the [JS/TS Query Guide](JS_TS_QUERY_GUIDE.md) for full details.
+
 ## Sorting
 MkDB uses a prefix-based sorting system:
 - **`+fieldname`**: Ascending order (lowest to highest).

@@ -1,4 +1,13 @@
-# MkDB Python SDK Reference
+# MkDB SDK Reference
+
+MkDB provides official clients for Python, JavaScript, and TypeScript.
+
+- [Python SDK Reference](#python-sdk-reference)
+- [JS/TS Query Guide](JS_TS_QUERY_GUIDE.md)
+
+---
+
+## Python SDK Reference
 
 The `pymkdb-client` package provides two clients:
 

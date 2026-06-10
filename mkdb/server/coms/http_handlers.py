@@ -290,9 +290,51 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
     # Response helpers
     # ------------------------------------------------------------------
 
+    def _apply_cors_headers(self) -> None:
+        db = self.database
+        if db is None:
+            return
+        
+        srv_cfg = getattr(db.config.servers, "http_server", None)
+        if srv_cfg is None or not getattr(srv_cfg, "cors_enabled", False):
+            return
+
+        origin = self.headers.get("Origin")
+
+        # 1. Access-Control-Allow-Origin
+        # Default to * or matching origin from list
+        cors_origins = getattr(srv_cfg, "cors_origins", ["*"])
+        if "*" in cors_origins:
+            # If credentials are allowed, origin cannot be *
+            if getattr(srv_cfg, "cors_credentials", False) and origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+            else:
+                self.send_header("Access-Control-Allow-Origin", "*")
+        elif origin and origin in cors_origins:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        
+        # 2. Access-Control-Allow-Methods
+        methods = getattr(srv_cfg, "cors_methods", ["GET", "POST", "DELETE", "OPTIONS"])
+        self.send_header("Access-Control-Allow-Methods", ", ".join(methods))
+        
+        # 3. Access-Control-Allow-Headers
+        headers = getattr(srv_cfg, "cors_headers", ["Content-Type", "Authorization", "X-Requested-With"])
+        self.send_header("Access-Control-Allow-Headers", ", ".join(headers))
+        
+        # 4. Access-Control-Allow-Credentials
+        if getattr(srv_cfg, "cors_credentials", False):
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            
+        # 5. Access-Control-Max-Age
+        max_age = getattr(srv_cfg, "cors_max_age", 86400)
+        self.send_header("Access-Control-Max-Age", str(max_age))
+
     def _json(self, code: int, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
+        self._apply_cors_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -318,6 +360,11 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
     # Routing
     # ------------------------------------------------------------------
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self._apply_cors_headers()
+        self.end_headers()
 
     def do_GET(self) -> None:
         if self._security_check():
@@ -408,10 +455,9 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
             return
 
         self.send_response(200)
+        self._apply_cors_headers()
         self.send_header("Content-Type", "application/javascript; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("ETag", etag)
         self.send_header("Cache-Control", "public, max-age=3600") # Cache for 1 hour
         self.end_headers()
         self.wfile.write(content)

@@ -76,12 +76,17 @@
         contains(val) { return new Q({ [this._name]: { "contains": val } }); }
         in(vals) { return new Q({ [this._name]: { "in": vals } }); }
         exists(val = true) { return new Q({ [this._name]: { "exists": val } }); }
+    }
 
     class MkDBClient {
         constructor(config = {}) {
             const host = config.host || "127.0.0.1";
-            const port = config.port || 80;
-            this.baseUrl = `http://${host}:${port}`;
+            const port = config.port || 443;
+            const protocol = config.protocol || "https";
+            this.baseUrl = `${protocol}://${host}`;
+            if ((protocol === "http" && port !== 80) || (protocol === "https" && port !== 443)) {
+                this.baseUrl += `:${port}`;
+            }
             this.trackRecords = config.trackRecords || false;
             this.authHeader = null;
 

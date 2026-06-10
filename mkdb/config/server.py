@@ -48,5 +48,9 @@ class http_server(base_object):
         self.max_body_size = 10 * 1024 * 1024
         self.cors_enabled = False
         self.cors_origins: list = ["*"]
+        self.cors_methods: list = ["GET", "POST", "DELETE", "PUT", "OPTIONS"]
+        self.cors_headers: list = ["Content-Type", "Authorization", "X-Requested-With"]
+        self.cors_credentials: bool = True
+        self.cors_max_age: int = 86400
         self.max_requests_per_second = 100
         super().__init__(data)

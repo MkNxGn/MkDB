@@ -583,6 +583,11 @@ def api_get_db_settings(database: mkdb, data: dict):
                 "port":                    cfg.servers.http_server.address.port,
                 "max_body_size":           cfg.servers.http_server.max_body_size,
                 "cors_enabled":            cfg.servers.http_server.cors_enabled,
+                "cors_origins":            cfg.servers.http_server.cors_origins,
+                "cors_methods":            cfg.servers.http_server.cors_methods,
+                "cors_headers":            cfg.servers.http_server.cors_headers,
+                "cors_credentials":        cfg.servers.http_server.cors_credentials,
+                "cors_max_age":            cfg.servers.http_server.cors_max_age,
                 "max_requests_per_second": cfg.servers.http_server.max_requests_per_second,
             },
         },
@@ -666,6 +671,19 @@ def api_update_server_config(database: mkdb, data: dict):
             srv_cfg.max_body_size = int(data["max_body_size"])
         if "cors_enabled" in data:
             srv_cfg.cors_enabled = bool(data["cors_enabled"])
+        if "cors_origins" in data:
+            val = data["cors_origins"]
+            srv_cfg.cors_origins = val if isinstance(val, list) else [s.strip() for s in str(val).split(",") if s.strip()]
+        if "cors_methods" in data:
+            val = data["cors_methods"]
+            srv_cfg.cors_methods = val if isinstance(val, list) else [s.strip() for s in str(val).split(",") if s.strip()]
+        if "cors_headers" in data:
+            val = data["cors_headers"]
+            srv_cfg.cors_headers = val if isinstance(val, list) else [s.strip() for s in str(val).split(",") if s.strip()]
+        if "cors_credentials" in data:
+            srv_cfg.cors_credentials = bool(data["cors_credentials"])
+        if "cors_max_age" in data:
+            srv_cfg.cors_max_age = int(data["cors_max_age"])
         if "max_requests_per_second" in data:
             srv_cfg.max_requests_per_second = int(data["max_requests_per_second"])
 
