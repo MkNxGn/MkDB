@@ -13,7 +13,7 @@ def formatItems(input:Union[dict, list]) -> Union[dict, list]:
                 data.append(item.json)
             elif type(item) in [list, dict]:
                 data.append(formatItems(item))
-            elif type(item) in [tuple, int, float, str, bool]:
+            elif type(item) in [tuple, int, float, str, bool, type(None)]:
                 data.append(item)
             elif callable(item):
                 continue
@@ -27,7 +27,8 @@ def formatItems(input:Union[dict, list]) -> Union[dict, list]:
                 data[key] = item.json
             elif type(item) in [list, dict]:
                 data[key] = formatItems(item)
-            elif type(item) in [tuple, int, float, str, bool]:
+            elif type(item) in [tuple, int, float, str, bool, type(None)]:
+                data[key] = item
                 data[key] = item
             elif callable(item):
                 continue

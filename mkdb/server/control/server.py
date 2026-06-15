@@ -104,10 +104,8 @@ _ACTION_ROLES: dict[str, str] = {
     "api_get_db_settings":        "viewer",
     "api_get_server_status":      "viewer",
     "api_list_users":             "viewer",
-    "api_get_rate_limit_log":     "viewer",
     "api_list_control_users":     "viewer",
-    "api_query_store":            "viewer",
-    "api_get_data_security":      "viewer",
+    "api_get_rate_limit_log":     "viewer",
     "api_get_store_metrics":      "viewer",
     "api_get_all_store_metrics":  "viewer",
     # operator
@@ -118,7 +116,16 @@ _ACTION_ROLES: dict[str, str] = {
     "api_reset_store_metrics":       "operator",
     "api_discover_store_fields":     "operator",
     "api_rebuild_store_indexes":     "operator",
+    "api_create_user":               "operator",
+    "api_delete_user":               "operator",
+    "api_set_user_password":         "operator",
+    "api_set_user_store_access":     "operator",
+    "api_remove_user_store_access":  "operator",
     # admin
+    "api_create_control_user":    "admin",
+    "api_delete_control_user":    "admin",
+    "api_set_control_user_password": "admin",
+    "api_set_control_user_role":  "admin",
     "api_update_server_config":   "admin",
     "api_server_control":         "admin",
     "api_set_auth_password":      "admin",
@@ -138,9 +145,9 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
     # helpers ─────────────────────────────────────────────────────────────────
 
     def _json(self, code: int, payload: dict) -> None:
-        body = json.dumps(payload).encode()
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

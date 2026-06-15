@@ -140,6 +140,7 @@ def api_get_store_config(database: mkdb, data: dict):
     store = database.config.stores[store_name]
     result = dict(store.json)
     result["entity_health"] = store.entity_config.health
+    result["recursion_health"] = store.query_recursion_limit_health
     return result
 
 def api_update_store_config(database: mkdb, data: dict):
@@ -172,6 +173,10 @@ def api_update_store_config(database: mkdb, data: dict):
         store.rate_limit = store_rate_limit(data["rate_limit"])
     if "slow_query_threshold_ms" in data:
         store.slow_query_threshold_ms = float(data["slow_query_threshold_ms"])
+    if "max_query_execution_time_ms" in data:
+        store.max_query_execution_time_ms = float(data["max_query_execution_time_ms"])
+    if "query_recursion_limit" in data:
+        store.query_recursion_limit = int(data["query_recursion_limit"])
     if "client_id_header" in data:
         store.client_id_header = str(data["client_id_header"]).strip()
     if "protect_reads" in data:
@@ -827,8 +832,10 @@ def api_set_user_store_access(database: mkdb, data: dict):
     if store_name not in database.config.stores:
         raise ValueError(f"Store '{store_name}' does not exist")
     perm = user.stores.get(store_name) or store_permission({})
-    perm.read  = bool(data.get("read",  perm.read))
-    perm.write = bool(data.get("write", perm.write))
+    if "read" in data:
+        perm.read = bool(data["read"])
+    if "write" in data:
+        perm.write = bool(data["write"])
     user.stores[store_name] = perm
     database.config.save()
     return {"message": f"Access updated for '{username}' on '{store_name}'"}
@@ -958,25 +965,6 @@ def api_delete_control_user(database: mkdb, data: dict):
     return {"message": f"Control user '{username}' deleted"}
 
 
-def api_set_control_user_role(database: mkdb, data: dict):
-    """Change a control user's role."""
-    if database is None:
-        raise RuntimeError("Database not initialized")
-    from mkdb.config.db import CONTROL_ROLES
-    username = str(data.get("username", "")).strip()
-    role     = str(data.get("role", "")).strip()
-    if not username:
-        raise ValueError("Username cannot be empty")
-    if role not in CONTROL_ROLES:
-        raise ValueError(f"Role must be one of: {', '.join(CONTROL_ROLES)}")
-    cu = database.config.control_users.get(username)
-    if cu is None:
-        raise ValueError(f"Control user '{username}' does not exist")
-    cu.role = role
-    database.config.save()
-    return {"message": f"Role for '{username}' updated to '{role}'"}
-
-
 def api_set_control_user_password(database: mkdb, data: dict):
     """Set or change a control user's password."""
     if database is None:
@@ -994,6 +982,25 @@ def api_set_control_user_password(database: mkdb, data: dict):
     cu.password_hash = hash_password(password)
     database.config.save()
     return {"message": f"Password updated for control user '{username}'"}
+
+
+def api_set_control_user_role(database: mkdb, data: dict):
+    """Change a control user's role."""
+    if database is None:
+        raise RuntimeError("Database not initialized")
+    from mkdb.config.db import CONTROL_ROLES
+    username = str(data.get("username", "")).strip()
+    role     = str(data.get("role", "")).strip()
+    if not username:
+        raise ValueError("Username cannot be empty")
+    if role not in CONTROL_ROLES:
+        raise ValueError(f"Role must be one of: {', '.join(CONTROL_ROLES)}")
+    cu = database.config.control_users.get(username)
+    if cu is None:
+        raise ValueError(f"Control user '{username}' does not exist")
+    cu.role = role
+    database.config.save()
+    return {"message": f"Role for '{username}' updated to '{role}'"}
 
 
 def api_get_store_metrics(database: mkdb, data: dict):

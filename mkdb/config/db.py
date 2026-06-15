@@ -118,6 +118,8 @@ class store_config(base_object):
         self.default_query_limit = 300      # 0 = unlimited; default limit if query doesn't provide one
         self.protect_reads = False          # when True, read/query also require auth
         self.slow_query_threshold_ms = 0.0  # 0 = disabled; >0 = log queries slower than X ms
+        self.max_query_execution_time_ms = 0.0  # 0 = disabled; >0 = hard limit to stop long queries
+        self.query_recursion_limit = 12     # max depth of nested $and/$or blocks
         self.client_id_header = ""          # HTTP header to use as client identifier; "" = remote_addr
         self.schema_auto_discover_on_boot  = False  # scan stored records for new fields on startup
         self.schema_auto_discover_on_write = False  # add unseen fields to schema on every write
@@ -130,6 +132,20 @@ class store_config(base_object):
         self.write_queue_config = write_queue_config(data.get("write_queue_config", {}))
         self.rate_limit         = store_rate_limit(data.get("rate_limit", {}))
         super().__init__(data)
+
+    @property
+    def query_recursion_limit_health(self) -> dict:
+        """Warning for high recursion limits."""
+        if self.query_recursion_limit > 20:
+            return {
+                "status": "warning",
+                "message": (
+                    f"Recursion limit {self.query_recursion_limit} is unrecommended. "
+                    "Deeply nested queries can cause high CPU usage and potential stack issues. "
+                    "Consider flattening your query structure."
+                )
+            }
+        return {"status": "ok", "message": ""}
 
 class backup_config(base_object):
     def __init__(self, data:dict={}):

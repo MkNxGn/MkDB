@@ -68,6 +68,16 @@ class mkdb:
     def run(self):
         print(f"{Fore.GREEN}Database '{self.config.name}' initialized at {os.getcwd()}{Fore.RESET}")
 
+        # Pre-flight check: ensure control-server actions are mapped to RBAC roles
+        from mkdb.server.control import server as ctrl_srv
+        from mkdb.server.control.api import actions as ctrl_actions
+        import inspect
+
+        for name, _ in inspect.getmembers(ctrl_actions, inspect.isfunction):
+            if name.startswith("api_") and name not in ctrl_srv._ACTION_ROLES:
+                # Default to admin for anything not explicitly specified
+                ctrl_srv._ACTION_ROLES[name] = "admin"
+
         print("Starting servers...")
         self._started_at = time.time()
         if self.config.servers.http_server.enabled:

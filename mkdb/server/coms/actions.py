@@ -187,9 +187,17 @@ def _do_query(store_obj, store_name: str, params: dict, client_key: str, transpo
         query_result = store_obj.query("query", params)
         duration_ms = (time.monotonic() - t0) * 1000.0
     except Exception as exc:
+        msg = str(exc)
+        # Determine appropriate HTTP status code
+        code = 500
+        if "recursion limit exceeded" in msg.lower():
+            code = 400
+        elif "exceeded hard limit" in msg.lower() or "timeout" in msg.lower():
+            code = 408 # Request Timeout
+
         _metrics.record(store_name, "error", client_key, transport=transport,
                         error_msg=f"Query failed: {exc}")
-        return ActionResult(ok=False, error=str(exc), http_code=500)
+        return ActionResult(ok=False, error=msg, http_code=code)
 
     ids = query_result.get("ids", [])
     total_matches = query_result.get("total_matches", len(ids))

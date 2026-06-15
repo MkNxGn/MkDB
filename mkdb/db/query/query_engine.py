@@ -36,6 +36,10 @@ class QuerySyntaxError(ValueError):
     pass
 
 
+class QueryTimeoutError(RuntimeError):
+    pass
+
+
 class QueryEngine:
     def __init__(self, store):
         """
@@ -328,28 +332,42 @@ class QueryEngine:
 
         store_name = self._store.config.name
         
+        # Start time tracking for hard limit
+        start_time = time.monotonic()
+        max_time_ms = getattr(self._store.config, "max_query_execution_time_ms", 0.0)
+
+        def check_timeout():
+            if max_time_ms > 0:
+                elapsed = (time.monotonic() - start_time) * 1000.0
+                if elapsed > max_time_ms:
+                    raise QueryTimeoutError(f"Query execution exceeded hard limit of {max_time_ms}ms")
+
         # 1. Gather candidates (Logical AND is default at top level)
         if not filter_dict:
             idx_mgr = self._store.index_manager
             candidates = set(idx_mgr.all_record_ids()) if idx_mgr else set()
         else:
-            candidates = self._eval_logic_block("$and", filter_dict)
+            candidates = self._eval_logic_block("$and", filter_dict, depth=0, timeout_checker=check_timeout)
 
         total_matches = len(candidates)
         results = list(candidates)
 
         # 2. Sort
         if sort_key and results:
+            check_timeout()
             reverse = sort_key.startswith("-")
             field = sort_key.lstrip("+-")
             
             # Helper to get sort value
             def get_val(rid):
+                # This could be slow for many records; timeout check inside?
+                # For now we'll check after sort or periodically if needed.
                 rec = self._store.read(rid)
                 v = rec.get(field) if rec else None
                 return (v is not None, v) # keep None values at bottom
 
             results.sort(key=get_val, reverse=reverse)
+            check_timeout()
 
         # 3. Paginate
         start = int(offset) if offset is not None else 0
@@ -374,8 +392,14 @@ class QueryEngine:
             "total_matches": total_matches
         }
 
-    def _eval_logic_block(self, logic_op: str, val: Any) -> set:
+    def _eval_logic_block(self, logic_op: str, val: Any, depth: int = 0, timeout_checker=None) -> set:
         """Evaluate $and, $or, or a standard filter dict."""
+        if timeout_checker: timeout_checker()
+
+        limit = getattr(self._store.config, "query_recursion_limit", 12)
+        if depth > limit:
+            raise QuerySyntaxError(f"Query recursion limit exceeded (max {limit} layers deep)")
+
         idx_mgr = self._store.index_manager
         if not idx_mgr: return set()
 
@@ -384,16 +408,16 @@ class QueryEngine:
                 raise QuerySyntaxError("$or requires a list of filters")
             res = set()
             for sub_filter in val:
-                res |= self._eval_logic_block("$and", sub_filter)
+                res |= self._eval_logic_block("$and", sub_filter, depth=depth + 1, timeout_checker=timeout_checker)
             return res
         
         if logic_op == "$and":
             # If it's a list, intersect them
             if isinstance(val, list):
                 if not val: return set(idx_mgr.all_record_ids())
-                res = self._eval_logic_block("$and", val[0])
+                res = self._eval_logic_block("$and", val[0], depth=depth + 1, timeout_checker=timeout_checker)
                 for sub in val[1:]:
-                    res &= self._eval_logic_block("$and", sub)
+                    res &= self._eval_logic_block("$and", sub, depth=depth + 1, timeout_checker=timeout_checker)
                 return res
             
             # If it's a dict, handle each field entry (standard behavior)
@@ -401,11 +425,11 @@ class QueryEngine:
                 candidate_sets = []
                 for field, field_val in val.items():
                     if field == "$or":
-                        candidate_sets.append(self._eval_logic_block("$or", field_val))
+                        candidate_sets.append(self._eval_logic_block("$or", field_val, depth=depth + 1, timeout_checker=timeout_checker))
                     elif field == "$and":
-                        candidate_sets.append(self._eval_logic_block("$and", field_val))
+                        candidate_sets.append(self._eval_logic_block("$and", field_val, depth=depth + 1, timeout_checker=timeout_checker))
                     else:
-                        candidate_sets.append(self._eval_field(field, field_val))
+                        candidate_sets.append(self._eval_field(field, field_val, depth=depth + 1, timeout_checker=timeout_checker))
                 
                 if not candidate_sets:
                     return set(idx_mgr.all_record_ids())
@@ -417,30 +441,33 @@ class QueryEngine:
 
         return set()
 
-    def _eval_field(self, field: str, value) -> set:
+    def _eval_field(self, field: str, value, depth: int = 0, timeout_checker=None) -> set:
         """Evaluate one field clause and return a set of matching record IDs."""
+        if timeout_checker: timeout_checker()
+
         idx_mgr = self._store.index_manager
         if not idx_mgr: return set()
 
         # Handle simplified syntax (exact match)
         if isinstance(value, (int, float)):
             idx = self._numeric_indexes.get(field)
-            return idx.exact_query(value) if idx else self._full_scan_filter(field, value)
+            return idx.exact_query(value) if idx else self._full_scan_filter(field, value, timeout_checker=timeout_checker)
 
         if isinstance(value, str):
             # Check if it looks like a simple string match
-            return self._text_match(field, value)
+            return self._text_match(field, value, timeout_checker=timeout_checker)
 
         if isinstance(value, list):
             # Legacy/Shortcut: list of strings -> FullText AND search
             idx = self._full_text_indexes.get(field)
             if idx: return idx.search(value, mode="and")
-            return self._full_scan_filter(field, value, op="in")
+            return self._full_scan_filter(field, value, op="in", timeout_checker=timeout_checker)
 
         if isinstance(value, dict):
             # Rich operators
             res = set(idx_mgr.all_record_ids())
             for op, op_val in value.items():
+                if timeout_checker: timeout_checker()
                 op = _OP_ALIASES.get(op, op)
                 
                 if op in (">", ">=", "<", "<="):
@@ -459,18 +486,18 @@ class QueryEngine:
                             hi_inclusive=inc if op.startswith("<") else True
                         )
                     else:
-                        res &= self._full_scan_filter(field, op_val, op)
+                        res &= self._full_scan_filter(field, op_val, op, timeout_checker=timeout_checker)
 
                 elif op == "exists":
                     def exists_check(v):
                         return v is not None and v != "" and v != []
-                    res &= self._full_scan_filter(field, op_val, op="custom", fn=exists_check if op_val else lambda v: not exists_check(v))
+                    res &= self._full_scan_filter(field, op_val, op="custom", fn=exists_check if op_val else lambda v: not exists_check(v), timeout_checker=timeout_checker)
 
                 elif op == "in" or op == "is_included":
-                    res &= self._full_scan_filter(field, op_val, op="in")
+                    res &= self._full_scan_filter(field, op_val, op="in", timeout_checker=timeout_checker)
                 
                 elif op == "nin" or op == "not_included":
-                    res &= self._full_scan_filter(field, op_val, op="nin")
+                    res &= self._full_scan_filter(field, op_val, op="nin", timeout_checker=timeout_checker)
 
                 elif op == "contains":
                     ft_idx = self._full_text_indexes.get(field)
@@ -478,20 +505,21 @@ class QueryEngine:
                         from mkdb.db.query.tokenizer import tokenize as _tok
                         res &= ft_idx.search(_tok(op_val), mode="and")
                     else:
-                        res &= self._full_scan_filter(field, op_val, op="contains")
+                        res &= self._full_scan_filter(field, op_val, op="contains", timeout_checker=timeout_checker)
 
                 elif op == "eq":
-                    res &= self._full_scan_filter(field, op_val, op="eq")
+                    res &= self._full_scan_filter(field, op_val, op="eq", timeout_checker=timeout_checker)
                 
                 elif op == "neq":
-                    res &= self._full_scan_filter(field, op_val, op="neq")
+                    res &= self._full_scan_filter(field, op_val, op="neq", timeout_checker=timeout_checker)
 
             return res
 
         return set()
 
-    def _full_scan_filter(self, field: str, target: Any, op: str = "eq", fn=None) -> set:
+    def _full_scan_filter(self, field: str, target: Any, op: str = "eq", fn=None, timeout_checker=None) -> set:
         """Last resort: read records and check values manually."""
+        if timeout_checker: timeout_checker()
         idx_mgr = self._store.index_manager
         all_ids = idx_mgr.all_record_ids() if idx_mgr else []
         res = set()
@@ -512,7 +540,9 @@ class QueryEngine:
                     return None
             return curr
 
-        for rid in all_ids:
+        for i, rid in enumerate(all_ids):
+            if i % 100 == 0 and timeout_checker:
+                timeout_checker()
             rec = self._store.read(rid)
             val = get_val(rec)
             
@@ -528,11 +558,12 @@ class QueryEngine:
             elif op == "custom" and fn and fn(val): res.add(rid)
         return res
 
-    def _text_match(self, field: str, value: str) -> set:
+    def _text_match(self, field: str, value: str, timeout_checker=None) -> set:
         """Handles string matching with FT index optimization if available."""
+        if timeout_checker: timeout_checker()
         ft_idx = self._full_text_indexes.get(field)
         if not ft_idx:
-            return self._full_scan_filter(field, value, "eq")
+            return self._full_scan_filter(field, value, "eq", timeout_checker=timeout_checker)
         
         # Intersection search to narrow candidates
         from mkdb.db.query.tokenizer import tokenize as _tok
@@ -541,7 +572,9 @@ class QueryEngine:
         
         candidates = ft_idx.search(stems, mode="and")
         res = set()
-        for rid in candidates:
+        for i, rid in enumerate(candidates):
+            if i % 100 == 0 and timeout_checker:
+                timeout_checker()
             rec = self._store.read(rid)
             if rec and rec.get(field) == value:
                 res.add(rid)

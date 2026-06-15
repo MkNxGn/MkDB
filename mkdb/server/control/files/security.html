@@ -1031,8 +1031,18 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(Object.assign({ action }, data))
             });
-            if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthenticated'); }
-            const json = await res.json();
+            if (res.status === 401) {
+                if (window.location.pathname !== '/login') window.location.href = '/login';
+                throw new Error('Unauthenticated');
+            }
+            const text = await res.text();
+            if (!text) throw new Error('Empty response from server');
+            let json;
+            try {
+                json = JSON.parse(text);
+            } catch (e) {
+                throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+            }
             if (json.status !== 'success') throw new Error(json.message || 'Server error');
             return json.result;
         }
@@ -1257,10 +1267,15 @@
                     '<td><strong>' + escHtml(u.username) + '</strong></td>' +
                     '<td>' + (storePills || '<span style="color:var(--text-dim);font-size:0.78rem">No access</span>') + '</td>' +
                     '<td><div class="table-actions">' +
-                    '<button class="btn btn-secondary btn-sm" onclick="openStoreAccessModal(' + JSON.stringify(u.username) + ')">Store Access</button>' +
-                    '<button class="btn btn-secondary btn-sm" onclick="openUserPwdModal(' + JSON.stringify(u.username) + ')">Password</button>' +
-                    '<button class="btn btn-danger btn-sm" onclick="deleteUser(' + JSON.stringify(u.username) + ')">Delete</button>' +
+                    '<button class="btn btn-secondary btn-sm" data-action="store-access">Store Access</button>' +
+                    '<button class="btn btn-secondary btn-sm" data-action="pwd">Password</button>' +
+                    '<button class="btn btn-danger btn-sm" data-action="delete">Delete</button>' +
                     '</div></td>';
+                (function (username) {
+                    tr.querySelector('[data-action="store-access"]').addEventListener('click', function () { openStoreAccessModal(username); });
+                    tr.querySelector('[data-action="pwd"]').addEventListener('click', function () { openUserPwdModal(username); });
+                    tr.querySelector('[data-action="delete"]').addEventListener('click', function () { deleteUser(username); });
+                }(u.username));
                 tbody.appendChild(tr);
             });
         }
@@ -1335,10 +1350,11 @@
             document.getElementById('storeAccessUsername').textContent = username;
             // Populate store dropdown
             try {
-                var storeList = await api('api_list_stores');
+                var response = await api('api_list_stores');
+                var storeList = response.stores || [];
                 var sel = document.getElementById('storeAccessSelect');
                 sel.innerHTML = '';
-                (storeList || []).forEach(function (s) {
+                storeList.forEach(function (s) {
                     var opt = document.createElement('option');
                     opt.value = s.name || s;
                     opt.textContent = s.name || s;
@@ -1358,15 +1374,31 @@
                 container.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:0">No stores assigned.</p>';
                 return;
             }
-            var html = '<p style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);margin-bottom:.5rem">Current Access</p><div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">';
+            var wrapper = document.createElement('div');
+            var label_p = document.createElement('p');
+            label_p.style.cssText = 'font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);margin-bottom:.5rem';
+            label_p.textContent = 'Current Access';
+            wrapper.appendChild(label_p);
+            var pills = document.createElement('div');
+            pills.style.cssText = 'display:flex;flex-wrap:wrap;gap:.35rem;align-items:center';
             Object.keys(user.stores).forEach(function (s) {
                 var perm = user.stores[s];
                 var label = perm.write ? s + ' (r+w)' : s + ' (r)';
-                html += '<span class="store-pill' + (perm.write ? ' write' : '') + '">' + escHtml(label) +
-                    ' <button onclick="removeStoreAccess(' + JSON.stringify(username) + ',' + JSON.stringify(s) + ')" style="background:none;border:none;cursor:pointer;color:inherit;font-size:0.75rem;line-height:1;padding:0 0 0 3px">&times;</button></span>';
+                var span = document.createElement('span');
+                span.className = 'store-pill' + (perm.write ? ' write' : '');
+                span.textContent = label;
+                var xBtn = document.createElement('button');
+                xBtn.textContent = '\u00d7';
+                xBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:inherit;font-size:0.75rem;line-height:1;padding:0 0 0 3px';
+                (function (uname, store) {
+                    xBtn.addEventListener('click', function () { removeStoreAccess(uname, store); });
+                }(username, s));
+                span.appendChild(xBtn);
+                pills.appendChild(span);
             });
-            html += '</div>';
-            container.innerHTML = html;
+            wrapper.appendChild(pills);
+            container.innerHTML = '';
+            container.appendChild(wrapper);
         }
 
         async function submitStoreAccess() {
@@ -1434,10 +1466,15 @@
                     '<td><strong>' + escHtml(u.username) + '</strong></td>' +
                     '<td>' + (ROLE_BADGE[u.role] || escHtml(u.role)) + '</td>' +
                     '<td><div class="table-actions">' +
-                    '<button class="btn btn-secondary btn-sm" onclick="openCtrlRoleModal(' + JSON.stringify(u.username) + ',' + JSON.stringify(u.role) + ')">Role</button>' +
-                    '<button class="btn btn-secondary btn-sm" onclick="openCtrlPwdModal(' + JSON.stringify(u.username) + ')">Password</button>' +
-                    '<button class="btn btn-danger btn-sm" onclick="deleteControlUser(' + JSON.stringify(u.username) + ')">Delete</button>' +
+                    '<button class="btn btn-secondary btn-sm" data-action="role">Role</button>' +
+                    '<button class="btn btn-secondary btn-sm" data-action="pwd">Password</button>' +
+                    '<button class="btn btn-danger btn-sm" data-action="delete">Delete</button>' +
                     '</div></td>';
+                (function (username, role) {
+                    tr.querySelector('[data-action="role"]').addEventListener('click', function () { openCtrlRoleModal(username, role); });
+                    tr.querySelector('[data-action="pwd"]').addEventListener('click', function () { openCtrlPwdModal(username); });
+                    tr.querySelector('[data-action="delete"]').addEventListener('click', function () { deleteControlUser(username); });
+                }(u.username, u.role));
                 tbody.appendChild(tr);
             });
         }

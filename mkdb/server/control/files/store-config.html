@@ -953,12 +953,23 @@
                                 <input type="number" id="rateLimitRps" min="1" placeholder="100">
                             </div>
                             <hr class="divider">
-                            <div class="section-heading">Query Monitoring</div>
+                            <div class="section-heading">Query Limits & Monitoring</div>
                             <div class="form-group">
-                                <label for="slowQueryThreshold">Slow Query Threshold (ms)</label>
+                                <label for="slowQueryThreshold">Slow Query Warning Threshold (ms)</label>
                                 <input type="number" id="slowQueryThreshold" min="0" step="1" placeholder="0 = disabled">
-                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Queries exceeding this duration are logged and flagged as warnings. Set 0 to disable.</span>
+                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Queries exceeding this duration are logged and flagged as warnings.</span>
                             </div>
+                            <div class="form-group">
+                                <label for="maxQueryExecutionTime">Max Query Execution Time (ms)</label>
+                                <input type="number" id="maxQueryExecutionTime" min="0" step="1" placeholder="0 = unlimited">
+                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Hard limit: Queries exceeding this duration are stopped immediately.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="queryRecursionLimit">Recursion Limit (layers)</label>
+                                <input type="number" id="queryRecursionLimit" min="1" max="50" placeholder="12" oninput="updateRecursionHealth()">
+                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Maximum depth for nested $and / $or filters. Higher values may impact performance.</span>
+                            </div>
+                            <div id="recursionHealthAlert" class="entity-health-alert" style="margin-top: 0.5rem;"></div>
                             <div class="save-row">
                                 <button class="btn btn-primary" onclick="saveEntity()">Save</button>
                             </div>
@@ -1372,10 +1383,13 @@
             document.getElementById('tokenLen').value = ec.token_length !== undefined ? ec.token_length : '';
             document.getElementById('entityAutoExpand').checked = !!(ec.auto_expand);
             document.getElementById('slowQueryThreshold').value = config.slow_query_threshold_ms !== undefined ? config.slow_query_threshold_ms : 0;
+            document.getElementById('maxQueryExecutionTime').value = config.max_query_execution_time_ms !== undefined ? config.max_query_execution_time_ms : 0;
+            document.getElementById('queryRecursionLimit').value = config.query_recursion_limit !== undefined ? config.query_recursion_limit : 12;
             var rl = config.rate_limit || {};
             document.getElementById('rateLimitEnabled').checked = !!(rl.enabled);
             document.getElementById('rateLimitRps').value = rl.max_requests_per_second !== undefined ? rl.max_requests_per_second : 100;
             updateCombinations();
+            updateRecursionHealth();
 
             // RAM
             var rc = config.ram_config || {};
@@ -1438,6 +1452,18 @@
             }
         }
 
+        function updateRecursionHealth() {
+            var limit = parseInt(document.getElementById('queryRecursionLimit').value, 10);
+            var el = document.getElementById('recursionHealthAlert');
+            if (!el) return;
+            el.className = 'entity-health-alert';
+            el.textContent = '';
+            if (!isNaN(limit) && limit > 20) {
+                el.className = 'entity-health-alert health-low';
+                el.textContent = '\u26a0 This is unrecommended. Deeply nested queries (>' + limit + ' layers) can cause significant CPU overhead and potential engine instability. Consider a more shallow data structure.';
+            }
+        }
+
         async function saveBasic() {
             var desc = document.getElementById('basicDesc').value.trim();
             var protectReads = document.getElementById('basicProtectReads').checked;
@@ -1478,9 +1504,18 @@
             if (tokenLen !== '') entity_config.token_length = parseInt(tokenLen, 10);
             var rate_limit = { enabled: rlEnabled, max_requests_per_second: rlRps };
             var slowThreshold = parseFloat(document.getElementById('slowQueryThreshold').value) || 0;
+            var maxTime = parseFloat(document.getElementById('maxQueryExecutionTime').value) || 0;
+            var recursionLimit = parseInt(document.getElementById('queryRecursionLimit').value, 10) || 12;
             try {
-                await api('api_update_store_config', { name: storeName, entity_config: entity_config, rate_limit: rate_limit, slow_query_threshold_ms: slowThreshold });
-                toast('Entity settings saved.', 'success');
+                await api('api_update_store_config', {
+                    name: storeName,
+                    entity_config: entity_config,
+                    rate_limit: rate_limit,
+                    slow_query_threshold_ms: slowThreshold,
+                    max_query_execution_time_ms: maxTime,
+                    query_recursion_limit: recursionLimit
+                });
+                toast('Entity & Query settings saved.', 'success');
             } catch (e) {
                 toast('Save failed: ' + e.message, 'error');
             }

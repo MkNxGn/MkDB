@@ -121,13 +121,25 @@
 
             // Use global fetch
             const response = await fetch(`${this.baseUrl}${path}`, options);
-            const result = await response.json();
+            const text = await response.text();
+
+            if (!text) {
+                if (response.ok) return null;
+                throw new MkDBError(`HTTP ${response.status}: Empty response`, response.status);
+            }
+
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch (err) {
+                throw new MkDBError(`Invalid JSON response: ${text.substring(0, 100)}`, response.status);
+            }
 
             if (result.status === "error") {
                 throw new MkDBError(result.message || "Unknown error", result.code);
             }
 
-            return result.data;
+            return result.data !== undefined ? result.data : result;
         }
 
         async ping() {
