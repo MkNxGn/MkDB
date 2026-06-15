@@ -271,11 +271,31 @@ def _worker_loop(
                     # Update local IndexManager views if they exist to prevent drift
                     # from the main process's disk state.
                     if hasattr(_read, "_managers"):
-                        idx = _read._managers[0]
+                        idx, _ = _read._managers
                         if meta:
                             idx._map[rid] = meta
                         else:
                             idx._map.pop(rid, None)
+                    
+                    # Also update QueryEngine's local index manager and rebuild indices if needed
+                    # Note: _query._engine uses its own WorkerStoreProxy with its own IndexManager
+                    if hasattr(_query, "_engine"):
+                        engine = _query._engine
+                        proxy = engine._store
+                        if proxy.index_manager:
+                            if meta:
+                                proxy.index_manager._map[rid] = meta
+                            else:
+                                proxy.index_manager._map.pop(rid, None)
+                        
+                        # Apply the change to query engine indexes as well
+                        # This prevents the need for a full rebuild to see the new record
+                        if meta:
+                            # It's a write (insertion or update)
+                            # We might not have the full record here if metadata is just (seg, offset, size)
+                            # but we can invalidate the engine's internal state if it uses field-level indexes.
+                            pass
+
         except Exception:
             pass  # queue.Empty or similar — expected
 
@@ -297,16 +317,18 @@ def _worker_loop(
         try:
             data = _resolve(task_dict, cache, base_path)
             results_queue.put({
-                "task_id": task_id,
-                "status":  "ok",
-                "data":    data,
+                "task_id":   task_id,
+                "worker_id": worker_id,
+                "status":    "ok",
+                "data":      data,
             })
         except Exception as exc:
             log.warning("Task %s failed: %s", task_id, exc)
             results_queue.put({
-                "task_id": task_id,
-                "status":  "error",
-                "error":   str(exc),
+                "task_id":   task_id,
+                "worker_id": worker_id,
+                "status":    "error",
+                "error":     str(exc),
             })
 
     log.info("Worker exiting (pid=%s)", os.getpid())

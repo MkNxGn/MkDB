@@ -220,16 +220,19 @@ class SocketServer:
         # 4. Client sends {type: "auth", username: ..., password: ...}.
         db = self.database
         has_users     = db is not None and bool(getattr(db.config, "users", {}))
-        protect_reads = (
+        
+        # Determine if any read operations are protected (globally or per-store)
+        global_protect = db is not None and getattr(db.config.data_security, "protect_reads", False)
+        store_protect  = (
             db is not None
-            and has_users
             and any(getattr(sc, "protect_reads", False) for sc in db.config.stores.values())
         )
+        protect_reads = has_users and (global_protect or store_protect)
 
         try:
             self._safe_write(session, {
                 "type":           "permissions",
-                "read_protected":  has_users and protect_reads,
+                "read_protected":  protect_reads,
                 # Writes are always protected — real users or the default password
                 "write_protected": True,
             })
@@ -470,11 +473,17 @@ class SocketServer:
                     return err(f"No access to store '{store_name}'")
                 if is_write and not perm.write:
                     return err("Write access denied")
+                if not is_write and not getattr(perm, "read", True):
+                    return err("Read access denied")
         elif has_users and is_write:
             return err("Authentication required for write operations")
         elif has_users and not is_write and action in ("read", "query"):
             store_cfg = db.config.stores.get(store_name)
-            if getattr(store_cfg, "protect_reads", False) and not session.username:
+            
+            global_protect = getattr(db.config.data_security, "protect_reads", False)
+            store_protect  = getattr(store_cfg, "protect_reads", False) if store_cfg else False
+            
+            if (global_protect or store_protect) and not session.username:
                 return err(f"Authentication required to read from store '{store_name}'")
 
         # ── Execute ──────────────────────────────────────────────────────────

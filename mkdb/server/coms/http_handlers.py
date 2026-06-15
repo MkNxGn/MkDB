@@ -221,14 +221,23 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
 
         # Determine whether this request needs auth
         store_cfg = db.config.stores.get(store_name) if store_name else None
-        protect_reads = getattr(store_cfg, "protect_reads", False) if store_cfg else False
+        
+        # Check if reads are protected globally or per-store
+        global_protect = getattr(db.config.data_security, "protect_reads", False)
+        store_protect  = getattr(store_cfg, "protect_reads", False) if store_cfg else False
+        protect_reads  = global_protect or store_protect
+
         if not require_write and not protect_reads:
             # Read-only request and reads are not protected → allow
             return False
 
         auth_header = self.headers.get("Authorization", "")
         if not auth_header.startswith("Basic "):
-            self._json(401, {"status": "error", "message": "Authentication required", "code": 401})
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="MkDB Data Plane"')
+            self._apply_cors_headers() # Ensure CORS headers are added even on 401
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "error", "message": "Authentication required", "code": 401}).encode("utf-8"))
             return True
 
         try:
@@ -254,6 +263,9 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
             if require_write and not perm.write:
                 self._json(403, {"status": "error", "message": "Write access denied", "code": 403})
                 return True
+            if not require_write and not getattr(perm, "read", True):
+                self._json(403, {"status": "error", "message": "Read access denied", "code": 403})
+                return True
 
         # Auth succeeded — track by username instead of IP
         self._client_key = username
@@ -273,9 +285,16 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
         # Extract store name and write requirement from URL (best-effort)
         store_name    = None
         require_write = False
-        if parts and parts[0] == "data" and len(parts) >= 2:
-            store_name    = parts[1]
-            require_write = self.command in ("POST", "DELETE")
+        if parts:
+            if parts[0] == "data":
+                if len(parts) >= 2:
+                    store_name = parts[1]
+                # /data or /data/{store}/{id}
+                require_write = self.command in ("POST", "DELETE")
+            elif parts[0] == "query":
+                # Queries are read operations, but we can't see the store name yet
+                # We'll check again in _handle_query once the body is read.
+                require_write = False
 
         if self._check_rate_limit(store_name):
             return True
@@ -497,15 +516,21 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
             self._err(f"Bad request: {exc}", 400)
             return
 
+        store_name = str(data.get("store", "")).strip()
+
+        # Second security check: authenticate for the specific store if not done yet
+        if self._check_user_auth(store_name, require_write=True):
+            return
+
         r = _execute(
             self.database, "write",
-            str(data.get("store", "")).strip(),
+            store_name,
             {
                 "record_id": str(data.get("record_id", "")).strip(),
                 "delta":     data.get("delta", {}),
                 "bytes_in":  int(self.headers.get("Content-Length", 0)),
             },
-            self._resolve_client_key(str(data.get("store", "")).strip()), "http",
+            self._resolve_client_key(store_name), "http",
         )
         self._ok(r.data) if r.ok else self._err(r.error, r.http_code)
 
@@ -524,11 +549,18 @@ class HTTPDataHandler(BaseHTTPRequestHandler):
             self._err(f"Bad request: {exc}", 400)
             return
 
+        store_name = str(data.get("store", "")).strip()
+        
+        # Second security check: now that we have the store name, verify if this
+        # specific store requires protected reads and if the user has permission.
+        if self._check_user_auth(store_name, require_write=False):
+            return
+
         r = _execute(
             self.database, "query",
-            str(data.get("store", "")).strip(),
+            store_name,
             data,
-            self._resolve_client_key(str(data.get("store", "")).strip()), "http",
+            self._resolve_client_key(store_name), "http",
         )
         self._ok(r.data) if r.ok else self._err(r.error, r.http_code)
 

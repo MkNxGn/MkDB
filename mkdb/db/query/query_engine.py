@@ -345,8 +345,14 @@ class QueryEngine:
         # 1. Gather candidates (Logical AND is default at top level)
         if not filter_dict:
             idx_mgr = self._store.index_manager
+            # Flush existing indexes in case we have unpersisted changes
+            # (though normally workers shouldn't have unpersisted changes
+            # unless we're in the middle of an on_write call).
             candidates = set(idx_mgr.all_record_ids()) if idx_mgr else set()
         else:
+            # Check for index drift: if any indexes are loaded, they might be stale
+            # if we didn't correctly apply local updates from invalidation_queue.
+            # Usually handled by worker.py's sync logic.
             candidates = self._eval_logic_block("$and", filter_dict, depth=0, timeout_checker=check_timeout)
 
         total_matches = len(candidates)

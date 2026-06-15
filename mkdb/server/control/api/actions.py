@@ -168,6 +168,9 @@ def api_update_store_config(database: mkdb, data: dict):
     if "ram_config" in data:
         from mkdb.config.db import ram_config
         store.ram_config = ram_config(data["ram_config"])
+    if "query_worker_config" in data:
+        from mkdb.config.db import query_worker_config
+        store.query_worker_config = query_worker_config(data["query_worker_config"])
     if "rate_limit" in data:
         from mkdb.config.db import store_rate_limit
         store.rate_limit = store_rate_limit(data["rate_limit"])
@@ -196,6 +199,34 @@ def api_update_store_config(database: mkdb, data: dict):
         store.schema_config = new_schema
 
     database.config.save()
+
+    # Apply live updates to running store if active
+    live_store = database.stores.get(store_name)
+    if live_store:
+        # Sync simple top-level fields
+        for field in ["slow_query_threshold_ms", "max_query_execution_time_ms", 
+                     "query_recursion_limit", "protect_reads", "nested_queries_enabled"]:
+            if field in data:
+                setattr(live_store.config, field, getattr(store, field))
+        
+        # Sync sub-configs
+        if "query_worker_config" in data:
+            old_qw = live_store.config.query_worker_config
+            new_qw = store.query_worker_config
+            live_store.config.query_worker_config = new_qw
+            
+            # Tell dispatcher to update its internal config reference
+            dispatcher = getattr(live_store, "_dispatcher", None)
+            if dispatcher:
+                dispatcher.config = new_qw
+                # If pool size or mode changed, we should probably restart it automatically
+                if (old_qw.parallel_enabled != new_qw.parallel_enabled or 
+                    old_qw.worker_count != new_qw.worker_count):
+                    dispatcher.restart()
+        
+        if "ram_config" in data:
+            live_store.config.ram_config = store.ram_config
+            # Note: ram_cache might need more complex sync if size/ttl changed
 
     # If schema changed, rebuild live query engine indexes for the running store so
     # changes take effect immediately without needing a server restart.
@@ -1066,8 +1097,13 @@ def api_get_store_metrics(database: mkdb, data: dict):
 
     # Threshold from live config (so the UI shows the current setting)
     slow_query_threshold_ms = 0.0
+    worker_status = {}
     if store_obj is not None:
         slow_query_threshold_ms = getattr(store_obj.config, "slow_query_threshold_ms", 0.0)
+        # Add worker status if dispatcher is active
+        dispatcher = getattr(store_obj, "_dispatcher", None)
+        if dispatcher:
+            worker_status = dispatcher.status()
 
     return {
         "reads":          m.get("reads", 0),
@@ -1087,6 +1123,7 @@ def api_get_store_metrics(database: mkdb, data: dict):
         "slow_query_log":          slow_query_log,
         "slow_query_threshold_ms": slow_query_threshold_ms,
         "error_log":               error_log,
+        "worker_status":           worker_status,
     }
 
 
@@ -1100,6 +1137,27 @@ def api_reset_store_metrics(database: mkdb, data: dict):
         raise ValueError("'name' is required")
     reset_store_metrics(name)
     return {"message": f"Metrics reset for store '{name}'"}
+
+
+def api_restart_workers(database: mkdb, data: dict):
+    """Restart the query worker pool for a store."""
+    if database is None:
+        raise RuntimeError("Database not initialized")
+    name = str(data.get("name", "")).strip()
+    if not name:
+        raise ValueError("'name' is required")
+    
+    store = database.stores.get(name)
+    if not store:
+        raise ValueError(f"Store '{name}' not found")
+    
+    # Needs mkdb instance to get store object
+    dispatcher = getattr(store, "_dispatcher", None)
+    if not dispatcher:
+        return {"message": "No dispatcher active for this store"}
+    
+    dispatcher.restart()
+    return {"message": f"Workers for store '{name}' have been restarted"}
 
 
 def api_get_all_store_metrics(database: mkdb, data: dict):

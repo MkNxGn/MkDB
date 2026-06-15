@@ -30,6 +30,9 @@ import os
 import queue
 import threading
 import uuid
+import os
+import time
+import multiprocessing
 from typing import Any
 
 from mkdb.db.query_workers.task import QueryTask
@@ -81,10 +84,15 @@ class QueryDispatcher:
         self._pending: dict[str, threading.Event] = {}   # task_id -> event
         self._results: dict[str, dict]            = {}   # task_id -> result dict
 
+        # -- Worker stats tracking -------------------------------------------
+        # worker_idx -> {completed, pid, last_active, is_alive}
+        self._worker_stats: dict[int, dict] = {}
+
         # -- Result-router daemon thread -------------------------------------
         self._result_router: threading.Thread | None = None
 
         self._started = False
+        self._last_restart_time = time.time()
 
     # -----------------------------------------------------------------------
     # Lifecycle
@@ -95,6 +103,8 @@ class QueryDispatcher:
         if self._started:
             return
         self._started = True
+        self._last_restart_time = time.time()
+        self._stop_event.clear()
 
         # Always start the result-router thread (handles both modes)
         self._result_router = threading.Thread(
@@ -108,6 +118,14 @@ class QueryDispatcher:
             self._start_process_workers()
         else:
             self._start_thread_worker()
+
+        # Start reboot watcher if config is set
+        if getattr(self.config, "reboot_interval_hours", 0) > 0:
+            threading.Thread(
+                target=self._reboot_watcher_loop,
+                daemon=True,
+                name=f"QueryDispatcher-RebootWatcher[{self.store_name}]"
+            ).start()
 
         logger.info(
             "QueryDispatcher started for store '%s' | parallel=%s | workers=%d",
@@ -136,8 +154,30 @@ class QueryDispatcher:
 
         self._workers.clear()
         self._invalidation_queues.clear()
+        self._worker_stats.clear()
         self._started = False
         logger.info("QueryDispatcher stopped for store '%s'", self.store_name)
+
+    def restart(self) -> None:
+        """Shutdown and bring back up all workers."""
+        logger.info("Restarting workers for store '%s'...", self.store_name)
+        self.stop()
+        self.start()
+
+    def _reboot_watcher_loop(self) -> None:
+        """Periodically checks if it's time to reboot workers."""
+        while not self._stop_event.is_set():
+            time.sleep(60) # check every minute
+            interval = getattr(self.config, "reboot_interval_hours", 0)
+            if interval <= 0:
+                continue
+            
+            elapsed_hours = (time.time() - self._last_restart_time) / 3600.0
+            if elapsed_hours >= interval:
+                logger.info("Scheduled worker reboot for store '%s' (uptime: %.1f hours)", self.store_name, elapsed_hours)
+                self.restart()
+                # break for this thread as start() will spin up a new watcher if needed
+                break
 
     # -----------------------------------------------------------------------
     # Public API
@@ -229,14 +269,33 @@ class QueryDispatcher:
         return self._started and not self._stop_event.is_set()
 
     def status(self) -> dict:
-        return {
+        """Return a snapshot of worker pool status and stats."""
+        status_data = {
             "store_name":     self.store_name,
             "parallel":       self.config.parallel_enabled,
-            "worker_count":   self.worker_count,
+            "worker_count":   len(self._workers),
             "queue_depth":    self.queue_depth,
             "pending_tasks":  len(self._pending),
             "running":        self.is_running,
+            "workers":        []
         }
+        
+        for i, (w_idx, s) in enumerate(self._worker_stats.items()):
+            w_handle = self._workers[i] if i < len(self._workers) else None
+            is_alive = False
+            if w_handle:
+                is_alive = w_handle.is_alive()
+            
+            status_data["workers"].append({
+                "id": w_idx,
+                "pid": s["pid"],
+                "type": s["type"],
+                "completed": s["completed"],
+                "last_active": s["last_active"],
+                "is_alive": is_alive
+            })
+        
+        return status_data
 
     # -----------------------------------------------------------------------
     # Internal — worker startup helpers
@@ -270,6 +329,12 @@ class QueryDispatcher:
             )
             p.start()
             self._workers.append(p)
+            self._worker_stats[i] = {
+                "completed": 0,
+                "pid": p.pid or 0,
+                "last_active": 0.0,
+                "type": "process"
+            }
 
     def _start_thread_worker(self) -> None:
         inv_q = multiprocessing.Queue()
@@ -294,6 +359,12 @@ class QueryDispatcher:
         )
         t.start()
         self._workers.append(t)
+        self._worker_stats[0] = {
+            "completed": 0,
+            "pid": os.getpid(),
+            "last_active": 0.0,
+            "type": "thread"
+        }
 
     # -----------------------------------------------------------------------
     # Internal — result-router loop
@@ -314,6 +385,13 @@ class QueryDispatcher:
             task_id = result.get("task_id")
             if not task_id:
                 continue
+
+            # Update worker stats
+            worker_id = result.get("worker_id")
+            if worker_id is not None and worker_id in self._worker_stats:
+                stats = self._worker_stats[worker_id]
+                stats["completed"] += 1
+                stats["last_active"] = time.time()
 
             with self._pending_lock:
                 self._results[task_id] = result

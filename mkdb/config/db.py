@@ -11,6 +11,7 @@ class query_worker_config(base_object):
         self.worker_cache_size = 500    # max records in each worker's local cache
         self.worker_cache_ttl = 30      # seconds before a worker cache entry expires
         self.task_timeout = 30.0        # seconds before submit() raises TimeoutError
+        self.reboot_interval_hours = 0  # 0 = disabled, else reboot workers every X hours
         super().__init__(data)
 
 class ram_config(base_object):

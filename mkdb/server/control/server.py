@@ -114,6 +114,7 @@ _ACTION_ROLES: dict[str, str] = {
     "api_update_store":              "operator",
     "api_update_store_config":       "operator",
     "api_reset_store_metrics":       "operator",
+    "api_restart_workers":           "operator",
     "api_discover_store_fields":     "operator",
     "api_rebuild_store_indexes":     "operator",
     "api_create_user":               "operator",

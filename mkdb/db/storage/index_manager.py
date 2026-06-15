@@ -156,6 +156,3 @@ class IndexManager:
         """Return all record IDs whose current segment matches seq_str."""
         return [rid for rid, (seg, _, _) in self._map.items() if seg == seq_str]
 
-    def all_record_ids(self) -> list:
-        """Return all live record IDs."""
-        return list(self._map.keys())

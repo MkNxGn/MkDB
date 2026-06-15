@@ -761,6 +761,14 @@
             padding-top: 1.25rem;
             border-top: 1px solid var(--border);
         }
+
+        .text-green {
+            color: var(--green);
+        }
+
+        .text-red {
+            color: var(--red);
+        }
     </style>
 </head>
 
@@ -834,9 +842,11 @@
                     <div class="tabs">
                         <button class="tab-btn active" data-tab="stats" onclick="switchTab('stats')">Stats</button>
                         <button class="tab-btn" data-tab="basic" onclick="switchTab('basic')">Basic</button>
+                        <button class="tab-btn" data-tab="security" onclick="switchTab('security')">Security</button>
                         <button class="tab-btn" data-tab="file" onclick="switchTab('file')">File</button>
                         <button class="tab-btn" data-tab="entity" onclick="switchTab('entity')">Entity</button>
                         <button class="tab-btn" data-tab="ram" onclick="switchTab('ram')">RAM</button>
+                        <button class="tab-btn" data-tab="workers" onclick="switchTab('workers')">Workers</button>
                         <button class="tab-btn" data-tab="schema" onclick="switchTab('schema')">Schema</button>
                     </div>
 
@@ -851,6 +861,26 @@
                                 <label for="basicDesc">Description</label>
                                 <textarea id="basicDesc" rows="3" placeholder="Brief description of this store"></textarea>
                             </div>
+                            <div class="toggle-row" style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
+                                <div class="toggle-info">
+                                    <strong>Enable Nested Queries</strong>
+                                    <span>Allow dot-notation (e.g. "user.profile.age") in queries and writes</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="basicNestedQueries">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="save-row">
+                                <button class="btn btn-primary" onclick="saveBasic()">Save</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECURITY TAB -->
+                    <div id="tab-security" class="tab-pane">
+                        <div class="card">
+                            <div class="section-heading">Access Control</div>
                             <div class="form-group">
                                 <label for="basicClientIdHeader">HTTP Client Identifier Header</label>
                                 <input type="text" id="basicClientIdHeader" placeholder="e.g. X-Forwarded-For, X-Real-IP">
@@ -866,18 +896,42 @@
                                     <span class="switch-slider"></span>
                                 </label>
                             </div>
+                            <hr class="divider">
+                            <div class="section-heading">Rate Limiting</div>
                             <div class="toggle-row">
                                 <div class="toggle-info">
-                                    <strong>Enable Nested Queries</strong>
-                                    <span>Allow dot-notation (e.g. "user.profile.age") in queries and writes</span>
+                                    <strong>Enable Rate Limit</strong>
+                                    <span>Limit requests per second from a single IP to this store</span>
                                 </div>
                                 <label class="switch">
-                                    <input type="checkbox" id="basicNestedQueries">
+                                    <input type="checkbox" id="rateLimitEnabled">
                                     <span class="switch-slider"></span>
                                 </label>
                             </div>
+                            <div class="form-group" style="margin-top:0.85rem">
+                                <label for="rateLimitRps">Max Requests / Second (per IP)</label>
+                                <input type="number" id="rateLimitRps" min="1" placeholder="100">
+                            </div>
+                            <hr class="divider">
+                            <div class="section-heading">Query Safety & Limits</div>
+                            <div class="form-group">
+                                <label for="slowQueryThreshold">Slow Query Warning Threshold (ms)</label>
+                                <input type="number" id="slowQueryThreshold" min="0" step="1" placeholder="0 = disabled">
+                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Queries exceeding this duration are logged and flagged as warnings.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="maxQueryExecutionTime">Max Query Execution Time (ms)</label>
+                                <input type="number" id="maxQueryExecutionTime" min="0" step="1" placeholder="0 = unlimited">
+                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Hard limit: Queries exceeding this duration are stopped immediately.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="queryRecursionLimit">Recursion Limit (layers)</label>
+                                <input type="number" id="queryRecursionLimit" min="1" max="50" placeholder="12" oninput="updateRecursionHealth()">
+                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Maximum depth for nested $and / $or filters. Higher values may impact performance.</span>
+                            </div>
+                            <div id="recursionHealthAlert" class="entity-health-alert" style="margin-top: 0.5rem;"></div>
                             <div class="save-row">
-                                <button class="btn btn-primary" onclick="saveBasic()">Save</button>
+                                <button class="btn btn-primary" onclick="saveSecurity()">Save Security Settings</button>
                             </div>
                         </div>
                     </div>
@@ -936,40 +990,6 @@
                                     <span class="switch-slider"></span>
                                 </label>
                             </div>
-                            <hr class="divider">
-                            <div class="section-heading">Rate Limiting</div>
-                            <div class="toggle-row">
-                                <div class="toggle-info">
-                                    <strong>Enable Rate Limit</strong>
-                                    <span>Limit requests per second from a single IP to this store</span>
-                                </div>
-                                <label class="switch">
-                                    <input type="checkbox" id="rateLimitEnabled">
-                                    <span class="switch-slider"></span>
-                                </label>
-                            </div>
-                            <div class="form-group" style="margin-top:0.85rem">
-                                <label for="rateLimitRps">Max Requests / Second (per IP)</label>
-                                <input type="number" id="rateLimitRps" min="1" placeholder="100">
-                            </div>
-                            <hr class="divider">
-                            <div class="section-heading">Query Limits & Monitoring</div>
-                            <div class="form-group">
-                                <label for="slowQueryThreshold">Slow Query Warning Threshold (ms)</label>
-                                <input type="number" id="slowQueryThreshold" min="0" step="1" placeholder="0 = disabled">
-                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Queries exceeding this duration are logged and flagged as warnings.</span>
-                            </div>
-                            <div class="form-group">
-                                <label for="maxQueryExecutionTime">Max Query Execution Time (ms)</label>
-                                <input type="number" id="maxQueryExecutionTime" min="0" step="1" placeholder="0 = unlimited">
-                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Hard limit: Queries exceeding this duration are stopped immediately.</span>
-                            </div>
-                            <div class="form-group">
-                                <label for="queryRecursionLimit">Recursion Limit (layers)</label>
-                                <input type="number" id="queryRecursionLimit" min="1" max="50" placeholder="12" oninput="updateRecursionHealth()">
-                                <span style="font-size:0.78rem;color:var(--text-dim);margin-top:0.3rem;display:block">Maximum depth for nested $and / $or filters. Higher values may impact performance.</span>
-                            </div>
-                            <div id="recursionHealthAlert" class="entity-health-alert" style="margin-top: 0.5rem;"></div>
                             <div class="save-row">
                                 <button class="btn btn-primary" onclick="saveEntity()">Save</button>
                             </div>
@@ -1228,6 +1248,68 @@
                         </div>
                     </div>
 
+                    <!-- WORKERS TAB -->
+                    <div id="tab-workers" class="tab-pane">
+                        <div class="card">
+                            <div class="section-heading">Worker Configuration</div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <strong>Parallel Processing</strong>
+                                    <span>Enable worker processes for CPU-bound query performance. When disabled, uses a single thread.</span>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="workParallelEnabled">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-row form-row-2">
+                                <div class="form-group">
+                                    <label for="workCount">Worker Count</label>
+                                    <input type="number" id="workCount" min="0" placeholder="0 = Auto (CPU cores)">
+                                </div>
+                                <div class="form-group">
+                                    <label for="workRebootHours">Periodic Reboot Interval (hours)</label>
+                                    <input type="number" id="workRebootHours" min="0" placeholder="0 = Disabled">
+                                </div>
+                            </div>
+                            <div class="form-row form-row-2">
+                                <div class="form-group">
+                                    <label for="workCacheSize">Worker Local Cache Size</label>
+                                    <input type="number" id="workCacheSize" min="0" placeholder="500">
+                                </div>
+                                <div class="form-group">
+                                    <label for="workCacheTtl">Worker Cache TTL (seconds)</label>
+                                    <input type="number" id="workCacheTtl" min="0" placeholder="30">
+                                </div>
+                            </div>
+                            <div class="save-row" style="justify-content: space-between; align-items: center;">
+                                <button class="btn" style="background: var(--red); color: white;" onclick="restartWorkers()">Restart All Workers</button>
+                                <button class="btn btn-primary" onclick="saveWorkers()">Save Configuration</button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="section-heading">Live Worker Status</div>
+                            <table class="data-table" id="worker-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>PID</th>
+                                        <th>Type</th>
+                                        <th>Tasks Completed</th>
+                                        <th>Last Active</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="worker-list">
+                                    <tr>
+                                        <td colspan="6" style="text-align:center">Loading worker status...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- SCHEMA TAB -->
                     <div id="tab-schema" class="tab-pane">
                         <div class="card">
@@ -1403,6 +1485,14 @@
             document.getElementById('ramKeepQueryFields').checked = !!(rc.keep_query_fields_in_ram);
             document.getElementById('ramQueryFieldsCacheTtl').value = rc.query_fields_cache_ttl !== undefined ? rc.query_fields_cache_ttl : '';
 
+            // Workers
+            var qw = config.query_worker_config || {};
+            document.getElementById('workParallelEnabled').checked = !!(qw.parallel_enabled);
+            document.getElementById('workCount').value = qw.worker_count !== undefined ? qw.worker_count : '';
+            document.getElementById('workRebootHours').value = qw.reboot_interval_hours !== undefined ? qw.reboot_interval_hours : '';
+            document.getElementById('workCacheSize').value = qw.worker_cache_size !== undefined ? qw.worker_cache_size : '';
+            document.getElementById('workCacheTtl').value = qw.worker_cache_ttl !== undefined ? qw.worker_cache_ttl : '';
+
             // Schema
             populateSchema((config.schema_config || {}).fields || {});
             document.getElementById('schemaDiscoverOnBoot').checked = !!(config.schema_auto_discover_on_boot);
@@ -1466,13 +1556,37 @@
 
         async function saveBasic() {
             var desc = document.getElementById('basicDesc').value.trim();
-            var protectReads = document.getElementById('basicProtectReads').checked;
             var nestedQueries = document.getElementById('basicNestedQueries').checked;
-            var clientIdHeader = document.getElementById('basicClientIdHeader').value.trim();
             try {
                 await api('api_update_store', { name: storeName, description: desc });
-                await api('api_update_store_config', { name: storeName, protect_reads: protectReads, client_id_header: clientIdHeader, nested_queries_enabled: nestedQueries });
+                await api('api_update_store_config', { name: storeName, nested_queries_enabled: nestedQueries });
                 toast('Basic settings saved.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveSecurity() {
+            var protectReads = document.getElementById('basicProtectReads').checked;
+            var clientIdHeader = document.getElementById('basicClientIdHeader').value.trim();
+            var rlEnabled = document.getElementById('rateLimitEnabled').checked;
+            var rlRps = parseInt(document.getElementById('rateLimitRps').value, 10) || 100;
+            var rate_limit = { enabled: rlEnabled, max_requests_per_second: rlRps };
+            var slowThreshold = parseFloat(document.getElementById('slowQueryThreshold').value) || 0;
+            var maxTime = parseFloat(document.getElementById('maxQueryExecutionTime').value) || 0;
+            var recursionLimit = parseInt(document.getElementById('queryRecursionLimit').value, 10) || 12;
+
+            try {
+                await api('api_update_store_config', {
+                    name: storeName,
+                    protect_reads: protectReads,
+                    client_id_header: clientIdHeader,
+                    rate_limit: rate_limit,
+                    slow_query_threshold_ms: slowThreshold,
+                    max_query_execution_time_ms: maxTime,
+                    query_recursion_limit: recursionLimit
+                });
+                toast('Security settings saved.', 'success');
             } catch (e) {
                 toast('Save failed: ' + e.message, 'error');
             }
@@ -1497,25 +1611,15 @@
             var tokenChars = document.getElementById('tokenChars').value;
             var tokenLen = document.getElementById('tokenLen').value;
             var autoExpand = document.getElementById('entityAutoExpand').checked;
-            var rlEnabled = document.getElementById('rateLimitEnabled').checked;
-            var rlRps = parseInt(document.getElementById('rateLimitRps').value, 10) || 100;
             var entity_config = { auto_expand: autoExpand };
             if (tokenChars) entity_config.token_chars = tokenChars;
             if (tokenLen !== '') entity_config.token_length = parseInt(tokenLen, 10);
-            var rate_limit = { enabled: rlEnabled, max_requests_per_second: rlRps };
-            var slowThreshold = parseFloat(document.getElementById('slowQueryThreshold').value) || 0;
-            var maxTime = parseFloat(document.getElementById('maxQueryExecutionTime').value) || 0;
-            var recursionLimit = parseInt(document.getElementById('queryRecursionLimit').value, 10) || 12;
             try {
                 await api('api_update_store_config', {
                     name: storeName,
-                    entity_config: entity_config,
-                    rate_limit: rate_limit,
-                    slow_query_threshold_ms: slowThreshold,
-                    max_query_execution_time_ms: maxTime,
-                    query_recursion_limit: recursionLimit
+                    entity_config: entity_config
                 });
-                toast('Entity & Query settings saved.', 'success');
+                toast('Entity settings saved.', 'success');
             } catch (e) {
                 toast('Save failed: ' + e.message, 'error');
             }
@@ -1549,6 +1653,40 @@
                 toast('RAM settings saved.', 'success');
             } catch (e) {
                 toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveWorkers() {
+            var parallel = document.getElementById('workParallelEnabled').checked;
+            var count = document.getElementById('workCount').value;
+            var reboot = document.getElementById('workRebootHours').value;
+            var cacheSize = document.getElementById('workCacheSize').value;
+            var cacheTtl = document.getElementById('workCacheTtl').value;
+
+            var work_config = {
+                parallel_enabled: parallel
+            };
+            if (count !== '') work_config.worker_count = parseInt(count, 10);
+            if (reboot !== '') work_config.reboot_interval_hours = parseInt(reboot, 10);
+            if (cacheSize !== '') work_config.worker_cache_size = parseInt(cacheSize, 10);
+            if (cacheTtl !== '') work_config.worker_cache_ttl = parseInt(cacheTtl, 10);
+
+            try {
+                await api('api_update_store_config', { name: storeName, query_worker_config: work_config });
+                toast('Worker settings saved. Some changes may require a restart.', 'success');
+            } catch (e) {
+                toast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function restartWorkers() {
+            if (!confirm('Are you sure you want to restart all query workers? This will briefly interrupt active queries.')) return;
+            try {
+                await api('api_restart_workers', { name: storeName });
+                toast('Workers restarted.', 'success');
+                setTimeout(loadStats, 1000); // refresh UI quickly
+            } catch (e) {
+                toast('Restart failed: ' + e.message, 'error');
             }
         }
 
@@ -1665,6 +1803,29 @@
                         '<td>' + fmtBytes(c.bytes_in) + '</td>' +
                         '<td>' + fmtBytes(c.bytes_out) + '</td></tr>';
                 }).join('');
+            }
+
+            // Workers Status
+            var wbody = document.getElementById('worker-list');
+            if (wbody) {
+                var ws = m.worker_status || {};
+                var workers = ws.workers || [];
+                if (workers.length === 0) {
+                    wbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:2rem;">No workers active</td></tr>';
+                } else {
+                    wbody.innerHTML = workers.map(function (w) {
+                        var statusClass = w.is_alive ? 'text-green' : 'text-red';
+                        var lastActive = w.last_active ? new Date(w.last_active * 1000).toLocaleTimeString() : 'Never';
+                        return '<tr>' +
+                            '<td>' + w.id + '</td>' +
+                            '<td><code>' + w.pid + '</code></td>' +
+                            '<td>' + w.type.toUpperCase() + '</td>' +
+                            '<td>' + fmtNum(w.completed) + '</td>' +
+                            '<td>' + lastActive + '</td>' +
+                            '<td class="' + statusClass + '">' + (w.is_alive ? 'ALIVE' : 'DEAD') + '</td>' +
+                            '</tr>';
+                    }).join('');
+                }
             }
 
             // Slow query log

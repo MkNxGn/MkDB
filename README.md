@@ -1,3 +1,6 @@
+# *Experimental*
+MkDB is an experimental custom database engine written in python. Please use at your own risk.
+
 # MkDB
 
 MkDB is a log-structured, partitioned NoSQL document database built entirely in Python. It provides a robust, self-healing storage engine with full-text search, numeric indexes, and dual-protocol network access — all manageable through an embedded web control panel.
